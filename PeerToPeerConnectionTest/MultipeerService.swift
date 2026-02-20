@@ -34,6 +34,9 @@ enum VideoCommand: Codable, CustomStringConvertible {
     case seekingStarted  // Master started seeking - pause slaves and show "seeking..."
     case seek(position: Double)
     case sync(position: Double, isPlaying: Bool)  // Periodic sync from master
+    case loadVideo(videoName: String)  // Master broadcasts video name to load
+    case requestVideoInfo  // Slave requests current video info from master
+    case videoInfoResponse(videoName: String, position: Double, isPlaying: Bool)  // Master responds with video name, position, and play state
     
     var description: String {
         switch self {
@@ -42,6 +45,9 @@ enum VideoCommand: Codable, CustomStringConvertible {
         case .seekingStarted: return "seekingStarted"
         case .seek(let pos): return "seek(position: \(String(format: "%.1f", pos))s)"
         case .sync(let pos, let playing): return "sync(position: \(String(format: "%.1f", pos))s, isPlaying: \(playing))"
+        case .loadVideo(let name): return "loadVideo(videoName: \(name))"
+        case .requestVideoInfo: return "requestVideoInfo"
+        case .videoInfoResponse(let name, let pos, let playing): return "videoInfoResponse(videoName: \(name), position: \(String(format: "%.1f", pos))s, isPlaying: \(playing))"
         }
     }
 }
@@ -55,6 +61,8 @@ struct VideoCommandMessage: Codable {
 
 protocol VideoSyncDelegate: AnyObject {
     func didReceiveVideoCommand(_ command: VideoCommand)
+    func didReceiveLoadVideoCommand(videoName: String)
+    func didReceiveVideoInfoResponse(videoName: String, position: Double, isPlaying: Bool)
 }
 
 // MARK: - MultipeerService
@@ -73,6 +81,7 @@ class MultipeerService: NSObject, ObservableObject {
     
     // Video sync
     weak var videoDelegate: VideoSyncDelegate?
+    var onVideoInfoRequest: ((MCPeerID) -> Void)?  // Callback for master to handle video info requests
     @Published var syncInterval: TimeInterval = 5.0  // Configurable sync interval
     @Published var commandLog: [String] = []  // For debugging - shows sent/received commands
     
@@ -220,6 +229,60 @@ class MultipeerService: NSObject, ObservableObject {
     func sendSyncCommand(position: Double, isPlaying: Bool) {
         sendVideoCommand(.sync(position: position, isPlaying: isPlaying))
     }
+    
+    func sendLoadVideoCommand(videoName: String) {
+        sendVideoCommand(.loadVideo(videoName: videoName))
+    }
+    
+    func sendRequestVideoInfoCommand() {
+        guard role == .slave, !connectedPeers.isEmpty else {
+            print("⚠️ Cannot request video info: role=\(role), peers=\(connectedPeers.count)")
+            return
+        }
+        
+        // Send request to master (first connected peer)
+        guard let masterPeer = connectedPeers.first?.id else { return }
+        
+        let message = VideoCommandMessage(command: .requestVideoInfo, timestamp: Date())
+        guard let data = try? JSONEncoder().encode(message) else {
+            print("❌ Failed to encode video info request")
+            return
+        }
+        
+        var commandData = Data([0xFF]) // Marker byte
+        commandData.append(data)
+        
+        do {
+            try session.send(commandData, toPeers: [masterPeer], with: .reliable)
+            print("✅ Sent video info request to master")
+            addCommandLog("📤 REQUEST: video info")
+        } catch {
+            print("❌ Failed to send video info request: \(error)")
+            addCommandLog("❌ Request failed: \(error.localizedDescription)")
+        }
+    }
+    
+    func sendVideoInfoResponse(videoName: String, position: Double, isPlaying: Bool) {
+        guard role == .master, !connectedPeers.isEmpty else { return }
+        
+        let message = VideoCommandMessage(command: .videoInfoResponse(videoName: videoName, position: position, isPlaying: isPlaying), timestamp: Date())
+        guard let data = try? JSONEncoder().encode(message) else {
+            print("❌ Failed to encode video info response")
+            return
+        }
+        
+        var commandData = Data([0xFF]) // Marker byte
+        commandData.append(data)
+        
+        do {
+            try session.send(commandData, toPeers: session.connectedPeers, with: .reliable)
+            print("✅ Sent video info response: \(videoName) at \(position)s, isPlaying: \(isPlaying)")
+            addCommandLog("📤 RESPONSE: video info (\(videoName), \(String(format: "%.1f", position))s, \(isPlaying ? "play" : "pause"))")
+        } catch {
+            print("❌ Failed to send video info response: \(error)")
+            addCommandLog("❌ Response failed: \(error.localizedDescription)")
+        }
+    }
 }
 
 // MARK: - MCSessionDelegate
@@ -267,12 +330,36 @@ extension MultipeerService: MCSessionDelegate {
                 addCommandLog("📥 RECEIVED: \(message.command)")
                 
                 DispatchQueue.main.async {
+                    // Handle requestVideoInfo on master side
+                    if case .requestVideoInfo = message.command {
+                        if self.role == .master {
+                            print("✅ Received video info request from \(peerID.displayName)")
+                            self.onVideoInfoRequest?(peerID)
+                        }
+                        return
+                    }
+                    
+                    // Handle videoInfoResponse on slave side
+                    if case .videoInfoResponse(let videoName, let position, let isPlaying) = message.command {
+                        if self.role == .slave {
+                            print("✅ Received video info response: \(videoName) at \(position)s, isPlaying: \(isPlaying)")
+                            self.videoDelegate?.didReceiveVideoInfoResponse(videoName: videoName, position: position, isPlaying: isPlaying)
+                        }
+                        return
+                    }
+                    
                     if self.videoDelegate == nil {
                         print("⚠️ Warning: videoDelegate is nil!")
                         self.addCommandLog("⚠️ Delegate is nil!")
                     } else {
-                        print("✅ Calling videoDelegate.didReceiveVideoCommand")
-                        self.videoDelegate?.didReceiveVideoCommand(message.command)
+                        // Handle loadVideo command separately
+                        if case .loadVideo(let videoName) = message.command {
+                            print("✅ Calling videoDelegate.didReceiveLoadVideoCommand")
+                            self.videoDelegate?.didReceiveLoadVideoCommand(videoName: videoName)
+                        } else {
+                            print("✅ Calling videoDelegate.didReceiveVideoCommand")
+                            self.videoDelegate?.didReceiveVideoCommand(message.command)
+                        }
                     }
                 }
             } catch {

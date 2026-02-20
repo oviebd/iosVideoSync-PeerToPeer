@@ -1,6 +1,42 @@
 internal import SwiftUI
 import AVKit
 import Combine
+import UIKit
+
+// MARK: - Video-Only Player View (no native controls)
+
+struct VideoOnlyPlayerView: UIViewRepresentable {
+    let player: AVPlayer
+    
+    func makeUIView(context: Context) -> PlayerUIView {
+        let view = PlayerUIView()
+        view.player = player
+        return view
+    }
+    
+    func updateUIView(_ uiView: PlayerUIView, context: Context) {
+        uiView.player = player
+    }
+}
+
+class PlayerUIView: UIView {
+    var player: AVPlayer? {
+        didSet {
+            playerLayer.player = player
+        }
+    }
+    
+    override static var layerClass: AnyClass { AVPlayerLayer.self }
+    
+    var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
+    
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        playerLayer.videoGravity = .resizeAspect
+        playerLayer.frame = bounds
+    }
+}
+
 //
 //// MARK: - SyncedVideoPlayer
 //
@@ -12,29 +48,24 @@ class SyncedVideoPlayer: ObservableObject, VideoSyncDelegate {
     @Published var isSeeking: Bool = false
     @Published var isReady: Bool = false
     @Published var isRemoteSeeking: Bool = false  // True when master is seeking (for slave UI)
+    @Published var currentVideoName: String? = nil  // Name of currently loaded video
     
     private var timeObserver: Any?
     private var syncTimer: Timer?
     private var cancellables = Set<AnyCancellable>()
     private var statusObserver: NSKeyValueObservation?
     private var seekCompletionTimer: Timer?  // For delayed play after seek
+    private var currentSecurityScopedURL: URL?  // Track security-scoped resource
     
     weak var service: MultipeerService?
     
-    let videoFileName: String
     let syncInterval: TimeInterval
     
-    init(videoFileName: String, syncInterval: TimeInterval = 5.0) {
-        self.videoFileName = videoFileName
+    init(syncInterval: TimeInterval = 5.0) {
         self.syncInterval = syncInterval
         
-        // Load video from bundle
-        guard let url = Bundle.main.url(forResource: videoFileName, withExtension: nil) else {
-            fatalError("Video file '\(videoFileName)' not found in bundle")
-        }
-        
-        print("📹 Loading video from: \(url)")
-        self.player = AVPlayer(url: url)
+        // Initialize with empty player (no video loaded)
+        self.player = AVPlayer()
         
         // Set audio session
         do {
@@ -45,6 +76,37 @@ class SyncedVideoPlayer: ObservableObject, VideoSyncDelegate {
         }
         
         setupPlayerObservers()
+        observePlayerStatus()
+    }
+    
+    // Load video from URL
+    func loadVideo(url: URL, videoName: String? = nil) {
+        // Stop current playback
+        player.pause()
+        
+        // Release previous security-scoped resource
+        if let previousURL = currentSecurityScopedURL {
+            previousURL.stopAccessingSecurityScopedResource()
+            currentSecurityScopedURL = nil
+        }
+        
+        // Store new URL for cleanup
+        currentSecurityScopedURL = url
+        
+        print("📹 Loading video from: \(url)")
+        print("   Video name: \(videoName ?? "unknown")")
+        
+        // Create new player item
+        let playerItem = AVPlayerItem(url: url)
+        player.replaceCurrentItem(with: playerItem)
+        
+        // Update video name
+        currentVideoName = videoName
+        
+        // Reset ready state
+        isReady = false
+        
+        // Re-observe status for new item
         observePlayerStatus()
     }
     
@@ -97,6 +159,11 @@ class SyncedVideoPlayer: ObservableObject, VideoSyncDelegate {
     }
     
     deinit {
+        // Release security-scoped resource
+        if let url = currentSecurityScopedURL {
+            url.stopAccessingSecurityScopedResource()
+        }
+        
         if let observer = timeObserver {
             player.removeTimeObserver(observer)
         }
@@ -178,6 +245,17 @@ class SyncedVideoPlayer: ObservableObject, VideoSyncDelegate {
     }
     
     // MARK: - VideoSyncDelegate
+    
+    func didReceiveLoadVideoCommand(videoName: String) {
+        // This is handled by VideoSyncDelegateWrapper in RoomView
+        // This method exists to satisfy the protocol but shouldn't be called directly
+        print("⚠️ SyncedVideoPlayer.didReceiveLoadVideoCommand called directly (should go through wrapper)")
+    }
+    
+    func didReceiveVideoInfoResponse(videoName: String, position: Double, isPlaying: Bool) {
+        // Handled by VideoSyncDelegateWrapper in RoomView
+        print("⚠️ SyncedVideoPlayer.didReceiveVideoInfoResponse called directly (should go through wrapper)")
+    }
     
     func didReceiveVideoCommand(_ command: VideoCommand) {
         print("🎬 Executing video command: \(command)")
@@ -272,6 +350,14 @@ class SyncedVideoPlayer: ObservableObject, VideoSyncDelegate {
                 player.pause()
                 service?.addCommandLog("✅ Synced pause state")
             }
+        case .loadVideo(videoName: let videoName):
+            return
+        case .requestVideoInfo:
+            // This should be handled by MultipeerService, not here
+            return
+        case .videoInfoResponse(videoName: _, position: _, isPlaying: _):
+            // This should be handled by VideoSyncDelegateWrapper, not here
+            return
         }
     }
 }
@@ -281,53 +367,94 @@ class SyncedVideoPlayer: ObservableObject, VideoSyncDelegate {
 struct VideoRoomView: View {
     @EnvironmentObject var service: MultipeerService
     @ObservedObject var videoPlayer: SyncedVideoPlayer
+    var onSelectVideo: (() -> Void)? = nil  // Callback for master to show video selection
     
     var body: some View {
-        VStack(spacing: 0) {
-            // Command Log at top
-            commandLogView
-                .frame(height: 180)
-            
-            // Video Player - no overlays
-            ZStack {
-                VideoPlayer(player: videoPlayer.player)
-                    .frame(height: UIScreen.main.bounds.height * 0.35)
-                    .background(Color.black)
+        GeometryReader { geometry in
+            let videoHeight = geometry.size.height * 0.35
+            VStack(spacing: 0) {
+                // Command Log at top
+                commandLogView
+                    .frame(height: 180)
                 
-                // Seeking indicator overlay (slave only)
-                if service.role == .slave && videoPlayer.isRemoteSeeking {
-                    ZStack {
-                        Color.black.opacity(0.7)
-                        
-                        VStack(spacing: 12) {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: AppTheme.accent))
-                                .scaleEffect(1.5)
+                // Video name label
+                videoNameLabel
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                
+                // Video Player - custom view only (no native in-player controls)
+                ZStack {
+                    VideoOnlyPlayerView(player: videoPlayer.player)
+                        .frame(height: videoHeight)
+                        .background(Color.black)
+                    
+                    // Seeking indicator overlay (slave only)
+                    if service.role == .slave && videoPlayer.isRemoteSeeking {
+                        ZStack {
+                            Color.black.opacity(0.7)
                             
-                            Text("SEEKING...")
-                                .font(.system(size: 16, weight: .bold, design: .monospaced))
-                                .foregroundColor(AppTheme.accent)
-                                .tracking(3)
+                            VStack(spacing: 12) {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: AppTheme.accent))
+                                    .scaleEffect(1.5)
+                                
+                                Text("SEEKING...")
+                                    .font(.system(size: 16, weight: .bold, design: .monospaced))
+                                    .foregroundColor(AppTheme.accent)
+                                    .tracking(3)
+                            }
                         }
+                        .transition(.opacity)
                     }
-                    .transition(.opacity)
                 }
-            }
-            .frame(height: UIScreen.main.bounds.height * 0.35)
-            
-            // Status bar below video
-            statusBar
-            
-            // Controls/info area
-            Spacer()
-            
-            if service.role == .master {
-                masterControls
-            } else {
-                slaveIndicator
+                .frame(height: videoHeight)
+                
+                // Status bar below video
+                statusBar
+                
+                // Controls/info area
+                Spacer()
+                
+                if service.role == .master {
+                    masterControls
+                } else {
+                    slaveIndicator
+                }
             }
         }
         .background(AppTheme.bg.ignoresSafeArea())
+    }
+    
+    // MARK: Video Name Label
+    
+    private var videoNameLabel: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "film")
+                .font(.system(size: 12))
+                .foregroundColor(AppTheme.textDim)
+            Text(videoPlayer.currentVideoName ?? "No video selected")
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundColor(AppTheme.textDim)
+            Spacer()
+            
+            // Select Video button (master only)
+            if service.role == .master, let onSelectVideo = onSelectVideo {
+                Button(action: onSelectVideo) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "film")
+                            .font(.system(size: 11))
+                        Text("Select Video")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .foregroundColor(AppTheme.accent)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(AppTheme.accentDim.opacity(0.3))
+                    .cornerRadius(6)
+                }
+            }
+        }
+        .padding(.horizontal, 4)
     }
     
     // MARK: Status Bar (below video)
@@ -464,7 +591,7 @@ struct VideoRoomView: View {
                     }
                     .padding(.vertical, 4)
                 }
-                .onChange(of: service.commandLog.count) { _ in
+                .onChange(of: service.commandLog.count) { oldValue, newValue in
                     if let lastIndex = service.commandLog.indices.last {
                         withAnimation {
                             proxy.scrollTo(lastIndex, anchor: .bottom)
@@ -631,6 +758,29 @@ struct VideoRoomView: View {
             Text(formatTime(videoPlayer.currentTime) + " / " + formatTime(videoPlayer.duration))
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundColor(AppTheme.textDim)
+            
+            Divider().background(AppTheme.border)
+            
+            // Get Video Info button (only show when connected to master)
+            if !service.connectedPeers.isEmpty {
+                Button(action: {
+                    print("📹 Requesting video info from master")
+                    service.sendRequestVideoInfoCommand()
+                }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "info.circle.fill")
+                            .font(.system(size: 12))
+                        Text("Get Video Info")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundColor(AppTheme.bg)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(AppTheme.accent)
+                    .cornerRadius(8)
+                }
+                .padding(.vertical, 4)
+            }
             
             Divider().background(AppTheme.border)
             

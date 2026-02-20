@@ -7,5 +7,7 @@
 		<string>_p2p-connect._tcp</string>
 		<string>_p2p-connect._udp</string>
 	</array>
+	<key>UIFileSharingEnabled</key>
+	<true/>
 </dict>
 </plist>

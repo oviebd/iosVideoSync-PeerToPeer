@@ -5,8 +5,14 @@ internal import AVFoundation
 
 struct RoomView: View {
     @EnvironmentObject var service: MultipeerService
-    @StateObject private var videoPlayer = SyncedVideoPlayer(videoFileName: "sample.mp4")
+    @EnvironmentObject var videoStore: VideoStore
+    @StateObject private var videoPlayer = SyncedVideoPlayer()
     @State private var selectedTab: RoomTab = .video
+    @State private var selectedVideo: VideoItem? = nil
+    @State private var showVideoSelectionSheet = false
+    @State private var showVideoLoadError = false
+    @State private var videoLoadErrorMessage = ""
+    @State private var videoDelegateWrapper: VideoSyncDelegateWrapper?
     
     enum RoomTab { case video, devices, messages }
     
@@ -20,7 +26,9 @@ struct RoomView: View {
                 tabBar
                 
                 switch selectedTab {
-                case .video:    VideoRoomView(videoPlayer: videoPlayer)
+                case .video:    VideoRoomView(videoPlayer: videoPlayer, onSelectVideo: {
+                    showVideoSelectionSheet = true
+                })
                 case .devices:  DevicesTab()
                 case .messages: MessagesTab()
                 }
@@ -35,14 +43,73 @@ struct RoomView: View {
             print("   Service role: \(service.role)")
             
             videoPlayer.service = service
-            service.videoDelegate = videoPlayer
+            // Create and store the delegate wrapper to prevent deallocation
+            let wrapper = VideoSyncDelegateWrapper(
+                player: videoPlayer,
+                videoStore: videoStore,
+                onLoadVideo: { _ in }
+            )
+            
+            // Set up callbacks for video loading
+            wrapper.onVideoLoaded = { videoItem, url in
+                videoPlayer.loadVideo(url: url, videoName: videoItem.name)
+                selectedVideo = videoItem
+                print("✅ Video loaded on slave: \(videoItem.name)")
+            }
+            
+            wrapper.onError = { errorMessage in
+                videoLoadErrorMessage = errorMessage
+                showVideoLoadError = true
+            }
+            
+            videoDelegateWrapper = wrapper
+            service.videoDelegate = wrapper
+            
+            // Set up callback for video info requests (master only)
+            service.onVideoInfoRequest = { peerID in
+                if self.service.role == .master {
+                    // Get current video name, position, and play/pause state
+                    let videoName = self.selectedVideo?.name ?? ""
+                    let position = self.videoPlayer.currentTime
+                    let isPlaying = self.videoPlayer.isPlaying
+                    
+                    if !videoName.isEmpty {
+                        self.service.sendVideoInfoResponse(videoName: videoName, position: position, isPlaying: isPlaying)
+                        print("✅ Responded to video info request: \(videoName) at \(position)s, isPlaying: \(isPlaying)")
+                    } else {
+                        print("⚠️ No video selected, cannot respond to video info request")
+                    }
+                }
+            }
             
             print("   ✅ Delegate set: \(service.videoDelegate != nil)")
+        }
+        .onChange(of: videoPlayer.isReady) { oldValue, newValue in
+            // When video becomes ready, broadcast to slaves (master only)
+            // Only broadcast if we have a selected video and peers are connected
+            if newValue, service.role == .master, let videoName = selectedVideo?.name, !service.connectedPeers.isEmpty {
+                service.sendLoadVideoCommand(videoName: videoName)
+                print("✅ Video ready, broadcasted: \(videoName)")
+            }
         }
         .onDisappear {
             print("🔧 Cleaning up video sync")
             videoPlayer.player.pause()
             service.videoDelegate = nil
+            service.onVideoInfoRequest = nil
+        }
+        .sheet(isPresented: $showVideoSelectionSheet) {
+            VideoSelectionSheet(selectedVideo: $selectedVideo, videoStore: videoStore)
+        }
+        .onChange(of: selectedVideo) { oldValue, newValue in
+            if let video = newValue, service.role == .master {
+                loadVideoForMaster(video)
+            }
+        }
+        .alert("Video Load Error", isPresented: $showVideoLoadError) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(videoLoadErrorMessage)
         }
     }
     
@@ -151,6 +218,286 @@ struct RoomView: View {
         case .video: return "Video"
         case .devices: return "Devices"
         case .messages: return "Messages"
+        }
+    }
+    
+    // MARK: - Video Loading Helpers
+    
+    private func resolveBookmark(_ bookmarkData: Data) throws -> URL {
+        var isStale = false
+        let resolvedURL = try URL(
+            resolvingBookmarkData: bookmarkData,
+            options: .withoutUI,
+            relativeTo: nil,
+            bookmarkDataIsStale: &isStale
+        )
+        
+        if isStale {
+            throw NSError(domain: "VideoLoadError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Bookmark is stale"])
+        }
+        
+        guard resolvedURL.startAccessingSecurityScopedResource() else {
+            throw NSError(domain: "VideoLoadError", code: 2, userInfo: [NSLocalizedDescriptionKey: "Failed to access security-scoped resource"])
+        }
+        
+        return resolvedURL
+    }
+    
+    private func loadVideoForMaster(_ videoItem: VideoItem) {
+        do {
+            let url = try resolveBookmark(videoItem.bookmarkURL)
+            videoPlayer.loadVideo(url: url, videoName: videoItem.name)
+            selectedVideo = videoItem
+            
+            // Broadcast will happen when video becomes ready (via onChange)
+            print("✅ Video loaded: \(videoItem.name)")
+        } catch {
+            print("❌ Failed to load video: \(error.localizedDescription)")
+            videoLoadErrorMessage = error.localizedDescription
+            showVideoLoadError = true
+            selectedVideo = nil
+        }
+    }
+    
+}
+
+// MARK: - VideoSyncDelegate Wrapper
+
+class VideoSyncDelegateWrapper: VideoSyncDelegate {
+    weak var player: SyncedVideoPlayer?
+    let videoStore: VideoStore
+    let onLoadVideo: (String) -> Void
+    var onVideoLoaded: ((VideoItem, URL) -> Void)?
+    var onError: ((String) -> Void)?
+    
+    init(player: SyncedVideoPlayer, videoStore: VideoStore, onLoadVideo: @escaping (String) -> Void) {
+        self.player = player
+        self.videoStore = videoStore
+        self.onLoadVideo = onLoadVideo
+    }
+    
+    func didReceiveVideoCommand(_ command: VideoCommand) {
+        print("🎬 VideoSyncDelegateWrapper: Forwarding video command to player")
+        player?.didReceiveVideoCommand(command)
+    }
+    
+    func didReceiveVideoInfoResponse(videoName: String, position: Double, isPlaying: Bool) {
+        print("📹 VideoSyncDelegateWrapper: Received video info response")
+        print("   Video name: \(videoName)")
+        print("   Position: \(position)s, isPlaying: \(isPlaying)")
+        
+        guard let player = player else {
+            print("❌ Player is nil")
+            DispatchQueue.main.async {
+                self.onError?("Player not available")
+            }
+            return
+        }
+        
+        // Validate position
+        guard position >= 0, position.isFinite else {
+            print("❌ Invalid position: \(position)")
+            DispatchQueue.main.async {
+                self.onError?("Invalid playback position received")
+            }
+            return
+        }
+        
+        let applyPlayState = {
+            if isPlaying {
+                player.player.play()
+                print("   ✅ Seek completed, starting playback")
+            } else {
+                player.player.pause()
+                print("   ✅ Seek completed, staying paused")
+            }
+        }
+        
+        // Check if video is already loaded
+        let isVideoAlreadyLoaded = player.currentVideoName == videoName
+        
+        if isVideoAlreadyLoaded {
+            print("✅ Video already loaded: \(videoName)")
+            // Only seek if position differs significantly (>0.5 seconds)
+            let diff = abs(player.currentTime - position)
+            if diff > 0.5 {
+                print("   Seeking to position: \(position)s (diff: \(diff)s)")
+                DispatchQueue.main.async {
+                    let time = CMTime(seconds: position, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
+                    player.player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero) { finished in
+                        if finished { applyPlayState() }
+                    }
+                }
+            } else {
+                print("   Position already synced (diff: \(diff)s)")
+                DispatchQueue.main.async { applyPlayState() }
+            }
+        } else {
+            print("📹 Video not loaded, loading: \(videoName)")
+            
+            // Search VideoStore for the video
+            guard let videoItem = videoStore.videos.first(where: { $0.name == videoName }) else {
+                print("❌ Video not found in store: \(videoName)")
+                print("   Available videos: \(videoStore.videos.map { $0.name })")
+                DispatchQueue.main.async {
+                    self.onError?("Video '\(videoName)' not available. Please import it first.")
+                }
+                return
+            }
+            
+            print("✅ Found video in store: \(videoItem.name)")
+            
+            // Resolve bookmark
+            do {
+                var isStale = false
+                let resolvedURL = try URL(
+                    resolvingBookmarkData: videoItem.bookmarkURL,
+                    options: .withoutUI,
+                    relativeTo: nil,
+                    bookmarkDataIsStale: &isStale
+                )
+                
+                if isStale {
+                    throw NSError(domain: "VideoLoadError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Bookmark is stale"])
+                }
+                
+                guard resolvedURL.startAccessingSecurityScopedResource() else {
+                    throw NSError(domain: "VideoLoadError", code: 2, userInfo: [NSLocalizedDescriptionKey: "Failed to access security-scoped resource"])
+                }
+                
+                print("✅ Bookmark resolved successfully: \(resolvedURL)")
+                
+                DispatchQueue.main.async {
+                    // Load video
+                    player.loadVideo(url: resolvedURL, videoName: videoItem.name)
+                    
+                    // Wait for video to be ready, then seek and play
+                    // Use a timer to check when video is ready
+                    var checkCount = 0
+                    let maxChecks = 50 // 5 seconds max wait
+                    Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { timer in
+                        checkCount += 1
+                        if player.isReady {
+                            timer.invalidate()
+                            print("   ✅ Video ready, seeking to position: \(position)s")
+                            let time = CMTime(seconds: position, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
+                            player.player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero) { finished in
+                                if finished {
+                                    if isPlaying {
+                                        player.player.play()
+                                        print("   ✅ Seek completed, starting playback")
+                                    } else {
+                                        player.player.pause()
+                                        print("   ✅ Seek completed, staying paused")
+                                    }
+                                }
+                            }
+                        } else if checkCount >= maxChecks {
+                            timer.invalidate()
+                            print("   ⚠️ Video did not become ready in time")
+                            self.onError?("Video loaded but did not become ready")
+                        }
+                    }
+                    
+                    self.onVideoLoaded?(videoItem, resolvedURL)
+                }
+            } catch {
+                print("❌ Failed to resolve bookmark: \(error.localizedDescription)")
+                DispatchQueue.main.async {
+                    self.onError?("Failed to load video: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+    
+    func didReceiveLoadVideoCommand(videoName: String) {
+        print("📹 VideoSyncDelegateWrapper: Received loadVideo command for: \(videoName)")
+        
+        // Search VideoStore for the video
+        guard let videoItem = videoStore.videos.first(where: { $0.name == videoName }) else {
+            print("❌ Video not found in store: \(videoName)")
+            print("   Available videos: \(videoStore.videos.map { $0.name })")
+            DispatchQueue.main.async {
+                self.onError?("Video not available. Please import '\(videoName)' first.")
+            }
+            return
+        }
+        
+        print("✅ Found video in store: \(videoItem.name)")
+        
+        // Resolve bookmark
+        do {
+            var isStale = false
+            let resolvedURL = try URL(
+                resolvingBookmarkData: videoItem.bookmarkURL,
+                options: .withoutUI,
+                relativeTo: nil,
+                bookmarkDataIsStale: &isStale
+            )
+            
+            if isStale {
+                throw NSError(domain: "VideoLoadError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Bookmark is stale"])
+            }
+            
+            guard resolvedURL.startAccessingSecurityScopedResource() else {
+                throw NSError(domain: "VideoLoadError", code: 2, userInfo: [NSLocalizedDescriptionKey: "Failed to access security-scoped resource"])
+            }
+            
+            print("✅ Bookmark resolved successfully: \(resolvedURL)")
+            
+            DispatchQueue.main.async {
+                self.onVideoLoaded?(videoItem, resolvedURL)
+            }
+        } catch {
+            print("❌ Failed to resolve bookmark: \(error.localizedDescription)")
+            DispatchQueue.main.async {
+                self.onError?("Failed to load video: \(error.localizedDescription)")
+            }
+        }
+    }
+}
+
+// MARK: - Video Selection Sheet
+
+struct VideoSelectionSheet: View {
+    @Binding var selectedVideo: VideoItem?
+    @ObservedObject var videoStore: VideoStore
+    @Environment(\.dismiss) var dismiss
+    
+    var body: some View {
+        NavigationView {
+            List {
+                if videoStore.videos.isEmpty {
+                    Text("No videos available")
+                        .foregroundColor(AppTheme.textDim)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding()
+                } else {
+                    ForEach(videoStore.videos) { video in
+                        Button(action: {
+                            selectedVideo = video
+                            dismiss()
+                        }) {
+                            HStack {
+                                Image(systemName: "film")
+                                    .foregroundColor(AppTheme.accent)
+                                Text(video.name)
+                                    .foregroundColor(AppTheme.text)
+                                Spacer()
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Select Video")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+            }
         }
     }
 }
@@ -288,7 +635,7 @@ struct MessagesTab: View {
                     .padding(.horizontal, 20)
                     .padding(.vertical, 16)
                 }
-                .onChange(of: service.messages.count) { _ in
+                .onChange(of: service.messages.count) { oldValue, newValue in
                     if let last = service.messages.last {
                         withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
                     }
