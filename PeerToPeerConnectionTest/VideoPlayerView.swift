@@ -591,6 +591,7 @@ struct VideoRoomView: View {
                     }
                     .padding(.vertical, 4)
                 }
+                
                 .onChange(of: service.commandLog.count) { oldValue, newValue in
                     if let lastIndex = service.commandLog.indices.last {
                         withAnimation {

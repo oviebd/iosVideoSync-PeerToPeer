@@ -31,6 +31,12 @@ class VideoStore: ObservableObject {
         videos.remove(atOffsets: offsets)
     }
     
+    func updateVideoName(id: UUID, newName: String) {
+        guard let index = videos.firstIndex(where: { $0.id == id }) else { return }
+        let updated = VideoItem(id: videos[index].id, name: newName.trimmingCharacters(in: .whitespacesAndNewlines), bookmarkURL: videos[index].bookmarkURL)
+        videos[index] = updated
+    }
+    
     private func saveToUserDefaults() {
         if let encoded = try? JSONEncoder().encode(videos) {
             UserDefaults.standard.set(encoded, forKey: userDefaultsKey)

@@ -261,6 +261,17 @@ struct RoomView: View {
     
 }
 
+// MARK: - Video name matching (case-insensitive, extension ignored)
+
+/// Returns true if both names refer to the same video: comparison is case-insensitive and file extension is ignored.
+/// e.g. "Video1.Mp4" matches "video1.mp4", "video2.MOV" matches "video2.mp4".
+private func videoNamesMatch(_ a: String?, _ b: String?) -> Bool {
+    guard let a = a, let b = b, !a.isEmpty, !b.isEmpty else { return a == b }
+    let stemA = (a as NSString).deletingPathExtension.lowercased()
+    let stemB = (b as NSString).deletingPathExtension.lowercased()
+    return stemA == stemB
+}
+
 // MARK: - VideoSyncDelegate Wrapper
 
 class VideoSyncDelegateWrapper: VideoSyncDelegate {
@@ -313,8 +324,8 @@ class VideoSyncDelegateWrapper: VideoSyncDelegate {
             }
         }
         
-        // Check if video is already loaded
-        let isVideoAlreadyLoaded = player.currentVideoName == videoName
+        // Check if video is already loaded (case-insensitive, extension ignored)
+        let isVideoAlreadyLoaded = videoNamesMatch(player.currentVideoName, videoName)
         
         if isVideoAlreadyLoaded {
             print("✅ Video already loaded: \(videoName)")
@@ -335,8 +346,8 @@ class VideoSyncDelegateWrapper: VideoSyncDelegate {
         } else {
             print("📹 Video not loaded, loading: \(videoName)")
             
-            // Search VideoStore for the video
-            guard let videoItem = videoStore.videos.first(where: { $0.name == videoName }) else {
+            // Search VideoStore for the video (case-insensitive, extension ignored)
+            guard let videoItem = videoStore.videos.first(where: { videoNamesMatch($0.name, videoName) }) else {
                 print("❌ Video not found in store: \(videoName)")
                 print("   Available videos: \(videoStore.videos.map { $0.name })")
                 DispatchQueue.main.async {
@@ -413,8 +424,8 @@ class VideoSyncDelegateWrapper: VideoSyncDelegate {
     func didReceiveLoadVideoCommand(videoName: String) {
         print("📹 VideoSyncDelegateWrapper: Received loadVideo command for: \(videoName)")
         
-        // Search VideoStore for the video
-        guard let videoItem = videoStore.videos.first(where: { $0.name == videoName }) else {
+        // Search VideoStore for the video (case-insensitive, extension ignored)
+        guard let videoItem = videoStore.videos.first(where: { videoNamesMatch($0.name, videoName) }) else {
             print("❌ Video not found in store: \(videoName)")
             print("   Available videos: \(videoStore.videos.map { $0.name })")
             DispatchQueue.main.async {

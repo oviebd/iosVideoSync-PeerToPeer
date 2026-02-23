@@ -12,6 +12,7 @@ struct VideoListView: View {
     @State private var showVideoPicker = false
     @State private var showDocumentPicker = false
     @State private var showPickerOptions = false
+    @State private var videoToEdit: VideoItem?
     
     var body: some View {
         NavigationView {
@@ -39,6 +40,13 @@ struct VideoListView: View {
                                     .font(.system(size: 15))
                             }
                             .listRowBackground(AppTheme.surface)
+                            .contextMenu {
+                                Button {
+                                    videoToEdit = video
+                                } label: {
+                                    Label("Edit Name", systemImage: "pencil")
+                                }
+                            }
                         }
                         .onDelete(perform: deleteVideos)
                     }
@@ -76,10 +84,67 @@ struct VideoListView: View {
                     videoStore.addVideo(name: name, bookmarkURL: bookmarkData)
                 }
             }
+            .sheet(item: $videoToEdit) { video in
+                EditVideoNameSheet(
+                    initialName: video.name,
+                    onSave: { newName in
+                        videoStore.updateVideoName(id: video.id, newName: newName)
+                        videoToEdit = nil
+                    },
+                    onCancel: {
+                        videoToEdit = nil
+                    }
+                )
+                .presentationDetents([.medium])
+            }
         }
     }
     
     private func deleteVideos(at offsets: IndexSet) {
         videoStore.deleteVideo(at: offsets)
+    }
+}
+
+// MARK: - Edit Video Name Sheet
+
+struct EditVideoNameSheet: View {
+    @State private var nameText: String
+    var onSave: (String) -> Void
+    var onCancel: () -> Void
+    
+    init(initialName: String, onSave: @escaping (String) -> Void, onCancel: @escaping () -> Void) {
+        _nameText = State(initialValue: initialName)
+        self.onSave = onSave
+        self.onCancel = onCancel
+    }
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 16) {
+                TextField("Video name", text: $nameText)
+                    .textFieldStyle(.roundedBorder)
+                    .padding()
+                Spacer()
+            }
+            .background(AppTheme.bg)
+            .navigationTitle("Edit Name")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        onCancel()
+                    }
+                    .foregroundColor(AppTheme.accent)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        onSave(nameText)
+                    }
+                    .foregroundColor(AppTheme.accent)
+                    .fontWeight(.semibold)
+                    .disabled(nameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
     }
 }
