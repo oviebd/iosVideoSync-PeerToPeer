@@ -14,7 +14,7 @@ struct RoomView: View {
     @State private var videoLoadErrorMessage = ""
     @State private var videoDelegateWrapper: VideoSyncDelegateWrapper?
     
-    enum RoomTab { case video, devices, messages }
+    enum RoomTab { case video, devices }
     
     var body: some View {
         ZStack {
@@ -30,7 +30,6 @@ struct RoomView: View {
                     showVideoSelectionSheet = true
                 })
                 case .devices:  DevicesTab()
-                case .messages: MessagesTab()
                 }
             }
         }
@@ -192,7 +191,7 @@ struct RoomView: View {
     // MARK: Tab Bar
     private var tabBar: some View {
         HStack(spacing: 0) {
-            ForEach([RoomTab.video, RoomTab.devices, RoomTab.messages], id: \.self) { tab in
+            ForEach([RoomTab.video, RoomTab.devices], id: \.self) { tab in
                 Button(action: { withAnimation(.easeInOut(duration: 0.2)) { selectedTab = tab } }) {
                     VStack(spacing: 8) {
                         HStack(spacing: 6) {
@@ -200,16 +199,6 @@ struct RoomView: View {
                                 .font(.system(size: 13))
                             Text(labelForTab(tab))
                                 .font(.system(size: 14, weight: .semibold))
-                            
-                            if tab == .messages && !service.messages.isEmpty {
-                                Text("\(service.messages.count)")
-                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                    .foregroundColor(AppTheme.bg)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(AppTheme.accent)
-                                    .clipShape(Capsule())
-                            }
                         }
                         .foregroundColor(selectedTab == tab ? AppTheme.accent : AppTheme.textDim)
                         
@@ -230,7 +219,6 @@ struct RoomView: View {
         switch tab {
         case .video: return "play.rectangle.fill"
         case .devices: return "network"
-        case .messages: return "bubble.left.fill"
         }
     }
     
@@ -238,7 +226,6 @@ struct RoomView: View {
         switch tab {
         case .video: return "Video"
         case .devices: return "Devices"
-        case .messages: return "Messages"
         }
     }
     
@@ -641,169 +628,3 @@ struct DeviceRow: View {
         .cornerRadius(12)
     }
 }
-
-// MARK: - Messages Tab
-
-struct MessagesTab: View {
-    @EnvironmentObject var service: MultipeerService
-    @State private var messageText = ""
-    @State private var scrollProxy: ScrollViewProxy? = nil
-    
-    var body: some View {
-        VStack(spacing: 0) {
-            // Message list
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(spacing: 10) {
-                        if service.messages.isEmpty {
-                            emptyMessages
-                                .id("top")
-                        } else {
-                            ForEach(service.messages) { msg in
-                                MessageBubble(message: msg)
-                                    .id(msg.id)
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 16)
-                }
-                .onChange(of: service.messages.count) { oldValue, newValue in
-                    if let last = service.messages.last {
-                        withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
-                    }
-                }
-            }
-            
-            // Input bar (master only)
-            if service.role == .master {
-                inputBar
-            } else {
-                slaveHint
-            }
-        }
-    }
-    
-    private var emptyMessages: some View {
-        VStack(spacing: 12) {
-            Spacer(minLength: 60)
-            Image(systemName: "bubble.left.and.bubble.right")
-                .font(.system(size: 36, weight: .thin))
-                .foregroundColor(AppTheme.textDim)
-            Text(service.role == .master ? "Send a message to all connected devices" : "Waiting for messages from master…")
-                .font(.system(size: 14))
-                .foregroundColor(AppTheme.textDim)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-    }
-    
-    private var inputBar: some View {
-        HStack(spacing: 10) {
-            TextField("Broadcast to all devices…", text: $messageText)
-                .font(.system(size: 15))
-                .foregroundColor(AppTheme.text)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(AppTheme.surface)
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(AppTheme.border))
-                .cornerRadius(10)
-            
-            Button(action: sendMessage) {
-                Image(systemName: "arrow.up")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(messageText.trimmingCharacters(in: .whitespaces).isEmpty ? AppTheme.textDim : AppTheme.bg)
-                    .frame(width: 44, height: 44)
-                    .background(messageText.trimmingCharacters(in: .whitespaces).isEmpty ? AppTheme.surface : AppTheme.accent)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(messageText.trimmingCharacters(in: .whitespaces).isEmpty ? AppTheme.border : Color.clear)
-                    )
-                    .cornerRadius(10)
-            }
-            .disabled(messageText.trimmingCharacters(in: .whitespaces).isEmpty)
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
-        .background(AppTheme.bg)
-        .overlay(Divider().background(AppTheme.border), alignment: .top)
-    }
-    
-    private var slaveHint: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "lock.fill")
-                .font(.system(size: 11))
-                .foregroundColor(AppTheme.textDim)
-            Text("Slave devices receive only — master controls broadcast")
-                .font(.system(size: 12))
-                .foregroundColor(AppTheme.textDim)
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity)
-        .background(AppTheme.surface)
-        .overlay(Divider().background(AppTheme.border), alignment: .top)
-    }
-    
-    private func sendMessage() {
-        let text = messageText.trimmingCharacters(in: .whitespaces)
-        guard !text.isEmpty else { return }
-        service.sendMessage(text)
-        messageText = ""
-    }
-}
-
-// MARK: - Message Bubble
-
-struct MessageBubble: View {
-    let message: P2PMessage
-    
-    var isOwn: Bool { message.senderName == "You" }
-    
-    var body: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            if isOwn { Spacer(minLength: 60) }
-            
-            if !isOwn {
-                // Avatar
-                ZStack {
-                    Circle()
-                        .fill(AppTheme.surface)
-                        .frame(width: 32, height: 32)
-                        .overlay(Circle().stroke(AppTheme.border))
-                    Text(String(message.senderName.prefix(1)).uppercased())
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(AppTheme.warning)
-                }
-            }
-            
-            VStack(alignment: isOwn ? .trailing : .leading, spacing: 4) {
-                if !isOwn {
-                    Text(message.senderName)
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
-                        .foregroundColor(AppTheme.textDim)
-                        .tracking(1)
-                }
-                
-                Text(message.text)
-                    .font(.system(size: 15))
-                    .foregroundColor(isOwn ? AppTheme.bg : AppTheme.text)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(isOwn ? AppTheme.accent : AppTheme.surface)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14)
-                            .stroke(isOwn ? Color.clear : AppTheme.border)
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
-                
-                Text(message.formattedTime)
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundColor(AppTheme.textDim)
-            }
-            
-            if !isOwn { Spacer(minLength: 60) }
-        }
-    }
-}
-
-

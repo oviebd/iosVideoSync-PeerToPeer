@@ -383,15 +383,46 @@ class SyncedVideoPlayer: ObservableObject, VideoSyncDelegate {
 struct VideoRoomView: View {
     @EnvironmentObject var service: MultipeerService
     @ObservedObject var videoPlayer: SyncedVideoPlayer
+    @State private var showLog: Bool = false
     var onSelectVideo: (() -> Void)? = nil  // Callback for master to show video selection
     
     var body: some View {
         GeometryReader { geometry in
             let videoHeight = geometry.size.height * 0.35
             VStack(spacing: 0) {
-                // Command Log at top
-                commandLogView
-                    .frame(height: 180)
+                // Command Log toggle button
+                HStack {
+                    Spacer()
+                    Button(action: {
+                        withAnimation(.spring()) {
+                            showLog.toggle()
+                        }
+                    }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: showLog ? "terminal.fill" : "terminal")
+                            Text(showLog ? "Hide Log" : "Show Log")
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        }
+                        .foregroundColor(showLog ? AppTheme.accent : AppTheme.textDim)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(AppTheme.surface)
+                        .cornerRadius(6)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(showLog ? AppTheme.accent.opacity(0.3) : AppTheme.border, lineWidth: 1)
+                        )
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                }
+                
+                // Command Log (conditionally visible)
+                if showLog {
+                    commandLogView
+                        .frame(height: 180)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
                 
                 // Video name label
                 videoNameLabel
@@ -831,23 +862,7 @@ struct VideoRoomView: View {
             .font(.system(size: 11, design: .monospaced))
             .foregroundColor(AppTheme.text)
             
-            // Test button
-            Button(action: {
-                print("🧪 Test: Toggling local playback")
-                if videoPlayer.player.rate > 0 {
-                    videoPlayer.player.pause()
-                } else {
-                    videoPlayer.player.play()
-                }
-            }) {
-                Text("TEST LOCAL PLAY")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .foregroundColor(AppTheme.bg)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(AppTheme.warning)
-                    .cornerRadius(6)
-            }
+
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
