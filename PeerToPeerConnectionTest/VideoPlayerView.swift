@@ -139,7 +139,7 @@ class SyncedVideoPlayer: ObservableObject, VideoSyncDelegate {
     
     private func setupPlayerObservers() {
         // Observe playback time
-        let interval = CMTime(seconds: 0.5, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
+        let interval = CMTime(seconds: 0.05, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
         timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             guard let self = self else { return }
             self.currentTime = time.seconds
@@ -355,8 +355,8 @@ class SyncedVideoPlayer: ObservableObject, VideoSyncDelegate {
             }
             
             // Seek first if position is off, then apply play/pause in completion so we don't play from wrong frame (smooth, no stuck frame)
-            if diff > 0.5 {
-                print("    → Correcting position (diff > 0.5s)")
+            if diff > 0.1 {
+                print("    → Correcting position (diff > 0.1s)")
                 let time = CMTime(seconds: position, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
                 player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero) { finished in
                     if finished { applyPlayState() }

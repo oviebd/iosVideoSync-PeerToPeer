@@ -83,7 +83,7 @@ class MultipeerService: NSObject, ObservableObject {
     weak var videoDelegate: VideoSyncDelegate?
     var onVideoInfoRequest: ((MCPeerID) -> Void)?  // Callback for master to handle video info requests
     var onPeerConnected: ((MCPeerID) -> Void)?     // Callback when a peer connects (master: push video state to new slave)
-    @Published var syncInterval: TimeInterval = 2.0  // Sync interval (shorter = smoother slave sync)
+    @Published var syncInterval: TimeInterval = 0.5  // Sync interval (shorter = smoother slave sync)
     @Published var commandLog: [String] = []  // For debugging - shows sent/received commands
     
     func addCommandLog(_ message: String) {
