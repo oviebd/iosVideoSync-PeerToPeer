@@ -61,7 +61,7 @@ class SyncedVideoPlayer: ObservableObject, VideoSyncDelegate {
     
     let syncInterval: TimeInterval
     
-    init(syncInterval: TimeInterval = 5.0) {
+    init(syncInterval: TimeInterval = 2.0) {
         self.syncInterval = syncInterval
         
         // Initialize with empty player (no video loaded)
@@ -244,6 +244,13 @@ class SyncedVideoPlayer: ObservableObject, VideoSyncDelegate {
         syncTimer = nil
     }
     
+    /// Call when leaving room so master stops broadcasting sync; prevents stale timer on re-enter.
+    func stopBroadcasting() {
+        stopSyncTimer()
+        seekCompletionTimer?.invalidate()
+        seekCompletionTimer = nil
+    }
+    
     // MARK: - VideoSyncDelegate
     
     func didReceiveLoadVideoCommand(videoName: String) {
@@ -294,6 +301,7 @@ class SyncedVideoPlayer: ObservableObject, VideoSyncDelegate {
             
         case .pause(let position):
             print("  → Pausing video at position \(position)s")
+            isRemoteSeeking = false
             
             // First, sync to the exact position
             let diff = abs(currentTime - position)
@@ -321,34 +329,42 @@ class SyncedVideoPlayer: ObservableObject, VideoSyncDelegate {
         case .seek(let position):
             print("  → Seeking to \(position)s")
             let time = CMTime(seconds: position, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
-            player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero) { finished in
+            player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] finished in
                 print("    → Seek finished: \(finished)")
+                self?.isRemoteSeeking = false
             }
             service?.addCommandLog("✅ Called player.seek()")
             
         case .sync(let position, let isPlaying):
-            // Only sync if difference is significant (>0.5 seconds)
             let diff = abs(currentTime - position)
             print("  → Sync: position=\(position)s, isPlaying=\(isPlaying), currentTime=\(currentTime)s, diff=\(diff)s")
+            
+            let applyPlayState = { [weak self] in
+                guard let self = self else { return }
+                self.isRemoteSeeking = false
+                if isPlaying && !self.isPlaying {
+                    print("    → Starting playback")
+                    if !self.isReady { print("    ⚠️ Warning: Player not ready yet") }
+                    self.player.play()
+                    self.service?.addCommandLog("✅ Synced play state")
+                } else if !isPlaying && self.isPlaying {
+                    print("    → Stopping playback")
+                    self.player.pause()
+                    self.service?.addCommandLog("✅ Synced pause state")
+                }
+            }
+            
+            // Seek first if position is off, then apply play/pause in completion so we don't play from wrong frame (smooth, no stuck frame)
             if diff > 0.5 {
                 print("    → Correcting position (diff > 0.5s)")
                 let time = CMTime(seconds: position, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
-                player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
-                service?.addCommandLog("✅ Synced position")
-            }
-            
-            // Sync play/pause state
-            if isPlaying && !self.isPlaying {
-                print("    → Starting playback")
-                if !self.isReady {
-                    print("    ⚠️ Warning: Player not ready yet")
+                player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero) { finished in
+                    if finished { applyPlayState() }
+                    else { applyPlayState() } // still apply play state even if seek reported not finished
                 }
-                player.play()
-                service?.addCommandLog("✅ Synced play state")
-            } else if !isPlaying && self.isPlaying {
-                print("    → Stopping playback")
-                player.pause()
-                service?.addCommandLog("✅ Synced pause state")
+                service?.addCommandLog("✅ Synced position")
+            } else {
+                applyPlayState()
             }
         case .loadVideo(videoName: let videoName):
             return

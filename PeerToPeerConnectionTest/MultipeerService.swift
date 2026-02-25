@@ -82,7 +82,8 @@ class MultipeerService: NSObject, ObservableObject {
     // Video sync
     weak var videoDelegate: VideoSyncDelegate?
     var onVideoInfoRequest: ((MCPeerID) -> Void)?  // Callback for master to handle video info requests
-    @Published var syncInterval: TimeInterval = 5.0  // Configurable sync interval
+    var onPeerConnected: ((MCPeerID) -> Void)?     // Callback when a peer connects (master: push video state to new slave)
+    @Published var syncInterval: TimeInterval = 2.0  // Sync interval (shorter = smoother slave sync)
     @Published var commandLog: [String] = []  // For debugging - shows sent/received commands
     
     func addCommandLog(_ message: String) {
@@ -283,6 +284,25 @@ class MultipeerService: NSObject, ObservableObject {
             addCommandLog("❌ Response failed: \(error.localizedDescription)")
         }
     }
+    
+    /// Send current video state to a single peer (e.g. when that peer just connected).
+    func sendVideoInfoResponse(videoName: String, position: Double, isPlaying: Bool, toPeer peerID: MCPeerID) {
+        guard role == .master else { return }
+        
+        let message = VideoCommandMessage(command: .videoInfoResponse(videoName: videoName, position: position, isPlaying: isPlaying), timestamp: Date())
+        guard let data = try? JSONEncoder().encode(message) else { return }
+        
+        var commandData = Data([0xFF])
+        commandData.append(data)
+        
+        do {
+            try session.send(commandData, toPeers: [peerID], with: .reliable)
+            print("✅ Pushed video info to new peer \(peerID.displayName): \(videoName) at \(String(format: "%.1f", position))s, \(isPlaying ? "play" : "pause")")
+            addCommandLog("📤 PUSH to \(peerID.displayName): video info")
+        } catch {
+            print("❌ Failed to push video info to peer: \(error)")
+        }
+    }
 }
 
 // MARK: - MCSessionDelegate
@@ -295,6 +315,10 @@ extension MultipeerService: MCSessionDelegate {
             case .connected:
                 if !self.connectedPeers.contains(where: { $0.id == peerID }) {
                     self.connectedPeers.append(ConnectedPeer(id: peerID))
+                    // Master: push current video state to newly connected slave for immediate sync
+                    if self.role == .master {
+                        self.onPeerConnected?(peerID)
+                    }
                 }
                 self.statusMessage = "\(peerID.displayName) connected"
                 if self.role == .slave { self.isInRoom = true }

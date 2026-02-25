@@ -68,11 +68,9 @@ struct RoomView: View {
             // Set up callback for video info requests (master only)
             service.onVideoInfoRequest = { peerID in
                 if self.service.role == .master {
-                    // Get current video name, position, and play/pause state
                     let videoName = self.selectedVideo?.name ?? ""
                     let position = self.videoPlayer.currentTime
                     let isPlaying = self.videoPlayer.isPlaying
-                    
                     if !videoName.isEmpty {
                         self.service.sendVideoInfoResponse(videoName: videoName, position: position, isPlaying: isPlaying)
                         print("✅ Responded to video info request: \(videoName) at \(position)s, isPlaying: \(isPlaying)")
@@ -82,7 +80,21 @@ struct RoomView: View {
                 }
             }
             
+            // When a new peer connects to master, push current video state so slave syncs immediately
+            service.onPeerConnected = { peerID in
+                if self.service.role == .master, let videoName = self.selectedVideo?.name, !videoName.isEmpty {
+                    let position = self.videoPlayer.currentTime
+                    let isPlaying = self.videoPlayer.isPlaying
+                    self.service.sendVideoInfoResponse(videoName: videoName, position: position, isPlaying: isPlaying, toPeer: peerID)
+                }
+            }
+            
             print("   ✅ Delegate set: \(service.videoDelegate != nil)")
+            
+            // If slave is already connected (e.g. re-entered room or tab), request current video state
+            if service.role == .slave, !service.connectedPeers.isEmpty {
+                service.sendRequestVideoInfoCommand()
+            }
         }
         .onChange(of: videoPlayer.isReady) { oldValue, newValue in
             // When video becomes ready, broadcast to slaves (master only)
@@ -92,11 +104,20 @@ struct RoomView: View {
                 print("✅ Video ready, broadcasted: \(videoName)")
             }
         }
+        .onChange(of: service.connectedPeers.count) { oldValue, newValue in
+            // When slave (re)connects to master, auto-request current video state for smooth sync
+            if service.role == .slave, oldValue == 0, newValue > 0 {
+                print("✅ Slave connected to master, requesting video info")
+                service.sendRequestVideoInfoCommand()
+            }
+        }
         .onDisappear {
             print("🔧 Cleaning up video sync")
             videoPlayer.player.pause()
+            videoPlayer.stopBroadcasting()
             service.videoDelegate = nil
             service.onVideoInfoRequest = nil
+            service.onPeerConnected = nil
         }
         .sheet(isPresented: $showVideoSelectionSheet) {
             VideoSelectionSheet(selectedVideo: $selectedVideo, videoStore: videoStore)
@@ -315,6 +336,7 @@ class VideoSyncDelegateWrapper: VideoSyncDelegate {
         }
         
         let applyPlayState = {
+            player.isRemoteSeeking = false
             if isPlaying {
                 player.player.play()
                 print("   ✅ Seek completed, starting playback")
