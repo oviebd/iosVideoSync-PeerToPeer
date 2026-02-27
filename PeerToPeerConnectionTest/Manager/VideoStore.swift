@@ -10,44 +10,91 @@ internal import SwiftUI
 import Combine
 
 class VideoStore: ObservableObject {
-    @Published var videos: [VideoItem] = [] {
-        didSet {
-            saveToUserDefaults()
-        }
-    }
+    @Published var videos: [VideoItem] = []
     
-    private let userDefaultsKey = "saved_videos"
+    private var dataManager: VideoLocalDataManager?
+    private var cancellables = Set<AnyCancellable>()
     
     init() {
-        loadFromUserDefaults()
+        do {
+            dataManager = try VideoLocalDataManager()
+            loadVideos()
+        } catch {
+            debugPrint("❌ Failed to initialize VideoLocalDataManager: \(error)")
+        }
     }
     
     func addVideo(name: String, bookmarkURL: Data) {
-        let newVideo = VideoItem(name: name, bookmarkURL: bookmarkURL)
-        videos.append(newVideo)
+        let newId = UUID().uuidString
+        let coreDataModel = VideoCoreDataModel(id: newId, name: name, bookmarkData: bookmarkURL)
+        
+        dataManager?.insertVideos(videoDatas: [coreDataModel])
+            .receive(on: DispatchQueue.main)
+            .sink(receiveCompletion: { completion in
+                if case .failure(let error) = completion {
+                    debugPrint("❌ Failed to insert video: \(error)")
+                }
+            }, receiveValue: { [weak self] success in
+                if success {
+                    self?.loadVideos()
+                }
+            })
+            .store(in: &cancellables)
     }
     
     func deleteVideo(at offsets: IndexSet) {
-        videos.remove(atOffsets: offsets)
+        let videosToDelete = offsets.map { videos[$0] }
+        
+        for video in videosToDelete {
+            dataManager?.deleteVideo(videoId: video.id.uuidString)
+                .receive(on: DispatchQueue.main)
+                .sink(receiveCompletion: { completion in
+                    if case .failure(let error) = completion {
+                        debugPrint("❌ Failed to delete video: \(error)")
+                    }
+                }, receiveValue: { [weak self] success in
+                    if success {
+                        self?.loadVideos()
+                    }
+                })
+                .store(in: &cancellables)
+        }
     }
     
     func updateVideoName(id: UUID, newName: String) {
-        guard let index = videos.firstIndex(where: { $0.id == id }) else { return }
-        let updated = VideoItem(id: videos[index].id, name: newName.trimmingCharacters(in: .whitespacesAndNewlines), bookmarkURL: videos[index].bookmarkURL)
-        videos[index] = updated
+        guard let video = videos.first(where: { $0.id == id }) else { return }
+        let trimmedName = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let updatedModel = VideoCoreDataModel(id: id.uuidString, name: trimmedName, bookmarkData: video.bookmarkURL)
+        
+        dataManager?.updateVideo(updatedData: updatedModel)
+            .receive(on: DispatchQueue.main)
+            .sink(receiveCompletion: { completion in
+                if case .failure(let error) = completion {
+                    debugPrint("❌ Failed to update video: \(error)")
+                }
+            }, receiveValue: { [weak self] _ in
+                self?.loadVideos()
+            })
+            .store(in: &cancellables)
     }
     
-    private func saveToUserDefaults() {
-        if let encoded = try? JSONEncoder().encode(videos) {
-            UserDefaults.standard.set(encoded, forKey: userDefaultsKey)
-        }
-    }
-    
-    private func loadFromUserDefaults() {
-        if let data = UserDefaults.standard.data(forKey: userDefaultsKey),
-           let decoded = try? JSONDecoder().decode([VideoItem].self, from: data) {
-            videos = decoded
-        }
+    private func loadVideos() {
+        dataManager?.retrieveVideos()
+            .receive(on: DispatchQueue.main)
+            .sink(receiveCompletion: { completion in
+                if case .failure(let error) = completion {
+                    debugPrint("❌ Failed to load videos: \(error)")
+                }
+            }, receiveValue: { [weak self] coreDataModels in
+                self?.videos = coreDataModels.map { model in
+                    VideoItem(
+                        id: UUID(uuidString: model.id) ?? UUID(),
+                        name: model.name,
+                        bookmarkURL: model.bookmarkData
+                    )
+                }
+            })
+            .store(in: &cancellables)
     }
     
     func resolveBookmark(_ bookmarkData: Data) -> URL? {
