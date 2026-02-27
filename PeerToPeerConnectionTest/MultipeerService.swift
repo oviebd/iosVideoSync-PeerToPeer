@@ -33,7 +33,6 @@ enum VideoCommand: Codable, CustomStringConvertible {
     case pause(position: Double)
     case seekingStarted  // Master started seeking - pause slaves and show "seeking..."
     case seek(position: Double)
-    case sync(position: Double, isPlaying: Bool)  // Periodic sync from master
     case loadVideo(videoName: String)  // Master broadcasts video name to load
     case requestVideoInfo  // Slave requests current video info from master
     case videoInfoResponse(videoName: String, position: Double, isPlaying: Bool)  // Master responds with video name, position, and play state
@@ -44,7 +43,6 @@ enum VideoCommand: Codable, CustomStringConvertible {
         case .pause(let pos): return "pause(position: \(String(format: "%.1f", pos))s)"
         case .seekingStarted: return "seekingStarted"
         case .seek(let pos): return "seek(position: \(String(format: "%.1f", pos))s)"
-        case .sync(let pos, let playing): return "sync(position: \(String(format: "%.1f", pos))s, isPlaying: \(playing))"
         case .loadVideo(let name): return "loadVideo(videoName: \(name))"
         case .requestVideoInfo: return "requestVideoInfo"
         case .videoInfoResponse(let name, let pos, let playing): return "videoInfoResponse(videoName: \(name), position: \(String(format: "%.1f", pos))s, isPlaying: \(playing))"
@@ -83,7 +81,6 @@ class MultipeerService: NSObject, ObservableObject {
     weak var videoDelegate: VideoSyncDelegate?
     var onVideoInfoRequest: ((MCPeerID) -> Void)?  // Callback for master to handle video info requests
     var onPeerConnected: ((MCPeerID) -> Void)?     // Callback when a peer connects (master: push video state to new slave)
-    @Published var syncInterval: TimeInterval = 0.5  // Sync interval (shorter = smoother slave sync)
     @Published var commandLog: [String] = []  // For debugging - shows sent/received commands
     
     func addCommandLog(_ message: String) {
@@ -227,9 +224,6 @@ class MultipeerService: NSObject, ObservableObject {
         sendVideoCommand(.seek(position: position))
     }
     
-    func sendSyncCommand(position: Double, isPlaying: Bool) {
-        sendVideoCommand(.sync(position: position, isPlaying: isPlaying))
-    }
     
     func sendLoadVideoCommand(videoName: String) {
         sendVideoCommand(.loadVideo(videoName: videoName))

@@ -51,7 +51,6 @@ class SyncedVideoPlayer: ObservableObject, VideoSyncDelegate {
     @Published var currentVideoName: String? = nil  // Name of currently loaded video
     
     private var timeObserver: Any?
-    private var syncTimer: Timer?
     private var cancellables = Set<AnyCancellable>()
     private var statusObserver: NSKeyValueObservation?
     private var seekCompletionTimer: Timer?  // For delayed play after seek
@@ -59,10 +58,7 @@ class SyncedVideoPlayer: ObservableObject, VideoSyncDelegate {
     
     weak var service: MultipeerService?
     
-    let syncInterval: TimeInterval
-    
-    init(syncInterval: TimeInterval = 2.0) {
-        self.syncInterval = syncInterval
+    init() {
         
         // Initialize with empty player (no video loaded)
         self.player = AVPlayer()
@@ -168,7 +164,6 @@ class SyncedVideoPlayer: ObservableObject, VideoSyncDelegate {
             player.removeTimeObserver(observer)
         }
         statusObserver?.invalidate()
-        syncTimer?.invalidate()
         seekCompletionTimer?.invalidate()
     }
     
@@ -177,13 +172,11 @@ class SyncedVideoPlayer: ObservableObject, VideoSyncDelegate {
     func masterPlay() {
         player.play()
         service?.sendPlayCommand(position: currentTime)
-        startSyncTimer()
     }
     
     func masterPause() {
         player.pause()
         service?.sendPauseCommand(position: currentTime)
-        stopSyncTimer()
     }
     
     func masterSeek(to position: Double) {
@@ -229,24 +222,8 @@ class SyncedVideoPlayer: ObservableObject, VideoSyncDelegate {
         masterSeek(to: newPosition)
     }
     
-    // MARK: - Sync Timer (Master only)
-    
-    private func startSyncTimer() {
-        stopSyncTimer()
-        syncTimer = Timer.scheduledTimer(withTimeInterval: syncInterval, repeats: true) { [weak self] _ in
-            guard let self = self else { return }
-            self.service?.sendSyncCommand(position: self.currentTime, isPlaying: self.isPlaying)
-        }
-    }
-    
-    private func stopSyncTimer() {
-        syncTimer?.invalidate()
-        syncTimer = nil
-    }
-    
     /// Call when leaving room so master stops broadcasting sync; prevents stale timer on re-enter.
     func stopBroadcasting() {
-        stopSyncTimer()
         seekCompletionTimer?.invalidate()
         seekCompletionTimer = nil
     }
@@ -335,37 +312,6 @@ class SyncedVideoPlayer: ObservableObject, VideoSyncDelegate {
             }
             service?.addCommandLog("✅ Called player.seek()")
             
-        case .sync(let position, let isPlaying):
-            let diff = abs(currentTime - position)
-            print("  → Sync: position=\(position)s, isPlaying=\(isPlaying), currentTime=\(currentTime)s, diff=\(diff)s")
-            
-            let applyPlayState = { [weak self] in
-                guard let self = self else { return }
-                self.isRemoteSeeking = false
-                if isPlaying && !self.isPlaying {
-                    print("    → Starting playback")
-                    if !self.isReady { print("    ⚠️ Warning: Player not ready yet") }
-                    self.player.play()
-                    self.service?.addCommandLog("✅ Synced play state")
-                } else if !isPlaying && self.isPlaying {
-                    print("    → Stopping playback")
-                    self.player.pause()
-                    self.service?.addCommandLog("✅ Synced pause state")
-                }
-            }
-            
-            // Seek first if position is off, then apply play/pause in completion so we don't play from wrong frame (smooth, no stuck frame)
-            if diff > 0.1 {
-                print("    → Correcting position (diff > 0.1s)")
-                let time = CMTime(seconds: position, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
-                player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero) { finished in
-                    if finished { applyPlayState() }
-                    else { applyPlayState() } // still apply play state even if seek reported not finished
-                }
-                service?.addCommandLog("✅ Synced position")
-            } else {
-                applyPlayState()
-            }
         case .loadVideo(videoName: let videoName):
             return
         case .requestVideoInfo:
@@ -778,10 +724,6 @@ struct VideoRoomView: View {
             }
             
             // Sync info
-            Text("Broadcasting • Sync every \(Int(videoPlayer.syncInterval))s")
-                .font(.system(size: 10, design: .monospaced))
-                .foregroundColor(AppTheme.textDim)
-                .tracking(1)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
