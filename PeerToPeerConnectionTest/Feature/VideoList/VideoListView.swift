@@ -9,9 +9,12 @@ internal import SwiftUI
 
 struct VideoListView: View {
     @EnvironmentObject var videoStore: VideoStore
+    @StateObject private var playlistVm = PlayListVm()
     @State private var showVideoPicker = false
     @State private var showDocumentPicker = false
     @State private var showPickerOptions = false
+    @State private var showCreatePlaylistAlert = false
+    @State private var newPlaylistName = ""
     @State private var videoToEdit: VideoItem?
     
     var body: some View {
@@ -19,39 +22,56 @@ struct VideoListView: View {
             ZStack {
                 AppTheme.bg.ignoresSafeArea()
                 
-                if videoStore.videos.isEmpty {
-                    VStack(spacing: 16) {
-                        Image(systemName: "film")
-                            .font(.system(size: 48))
-                            .foregroundColor(AppTheme.textDim)
-                        Text("No videos imported yet")
-                            .font(.system(size: 16))
-                            .foregroundColor(AppTheme.textDim)
+                VStack(spacing: 0) {
+                    if !playlistVm.playlists.isEmpty {
+                        PlayListView(playlists: playlistVm.playlists, onSelect: { playlist in
+                            // Handle playlist selection if needed
+                            debugPrint("Selected playlist: \(playlist.name)")
+                        }, onDelete: { playlist in
+                            playlistVm.deletePlaylist(id: playlist.id)
+                        })
                     }
-                } else {
-                    List {
-                        ForEach(videoStore.videos) { video in
-                            HStack {
-                                Image(systemName: "play.circle.fill")
-                                    .foregroundColor(AppTheme.accent)
-                                    .font(.system(size: 20))
-                                Text(video.name)
-                                    .foregroundColor(AppTheme.text)
-                                    .font(.system(size: 15))
-                            }
-                            .listRowBackground(AppTheme.surface)
-                            .contextMenu {
-                                Button {
-                                    videoToEdit = video
-                                } label: {
-                                    Label("Edit Name", systemImage: "pencil")
+                    
+                    if videoStore.videos.isEmpty && playlistVm.playlists.isEmpty {
+                        Spacer()
+                        VStack(spacing: 16) {
+                            Image(systemName: "film")
+                                .font(.system(size: 48))
+                                .foregroundColor(AppTheme.textDim)
+                            Text("No videos or playlists yet")
+                                .font(.system(size: 16))
+                                .foregroundColor(AppTheme.textDim)
+                        }
+                        Spacer()
+                    } else {
+                        List {
+                            if !videoStore.videos.isEmpty {
+                                Section(header: Text("Videos").foregroundColor(AppTheme.textDim)) {
+                                    ForEach(videoStore.videos) { video in
+                                        HStack {
+                                            Image(systemName: "play.circle.fill")
+                                                .foregroundColor(AppTheme.accent)
+                                                .font(.system(size: 20))
+                                            Text(video.name)
+                                                .foregroundColor(AppTheme.text)
+                                                .font(.system(size: 15))
+                                        }
+                                        .listRowBackground(AppTheme.surface)
+                                        .contextMenu {
+                                            Button {
+                                                videoToEdit = video
+                                            } label: {
+                                                Label("Edit Name", systemImage: "pencil")
+                                            }
+                                        }
+                                    }
+                                    .onDelete(perform: deleteVideos)
                                 }
                             }
                         }
-                        .onDelete(perform: deleteVideos)
+                        .listStyle(.plain)
+                        .scrollContentBackground(.hidden)
                     }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
                 }
             }
             .navigationTitle("Videos")
@@ -65,12 +85,16 @@ struct VideoListView: View {
                     }
                 }
             }
-            .confirmationDialog("Select Video Source", isPresented: $showPickerOptions, titleVisibility: .visible) {
+            .confirmationDialog("Select Option", isPresented: $showPickerOptions, titleVisibility: .visible) {
                 Button("Photos Library") {
                     showVideoPicker = true
                 }
                 Button("Files") {
                     showDocumentPicker = true
+                }
+                Button("Create Folder") {
+                    newPlaylistName = ""
+                    showCreatePlaylistAlert = true
                 }
                 Button("Cancel", role: .cancel) { }
             }
@@ -96,6 +120,15 @@ struct VideoListView: View {
                     }
                 )
                 .presentationDetents([.medium])
+            }
+            .alert("New Folder", isPresented: $showCreatePlaylistAlert) {
+                TextField("Folder Name", text: $newPlaylistName)
+                Button("Create") {
+                    playlistVm.createPlaylist(name: newPlaylistName)
+                }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("Enter a name for this folder.")
             }
         }
     }
