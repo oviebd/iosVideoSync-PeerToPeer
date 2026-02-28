@@ -9,6 +9,7 @@ internal import SwiftUI
 
 struct PlayListItem: View {
     let playlist: PlaylistModelData
+    let isSelected: Bool
     let onSelect: () -> Void
     let onDelete: () -> Void
     
@@ -16,37 +17,25 @@ struct PlayListItem: View {
     
     var body: some View {
         Button(action: onSelect) {
-            VStack(alignment: .leading, spacing: 8) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(AppTheme.accentDim.opacity(0.3))
-                    
-                    Image(systemName: "folder.fill")
-                        .font(.system(size: 24))
-                        .foregroundColor(AppTheme.accent)
-                }
-                .frame(width: 60, height: 60)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(playlist.name)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(isSelected ? AppTheme.accent : AppTheme.text)
+                    .lineLimit(1)
                 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(playlist.name)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(AppTheme.text)
-                        .lineLimit(1)
-                    
-                    Text("\(playlist.videoIds.count) videos")
-                        .font(.system(size: 11))
-                        .foregroundColor(AppTheme.textDim)
-                }
+                Text("\(playlist.videoIds.count) videos")
+                    .font(.system(size: 11))
+                    .foregroundColor(isSelected ? AppTheme.accent.opacity(0.7) : AppTheme.textDim)
             }
-            .padding(12)
-            .background(AppTheme.surface)
-            .cornerRadius(16)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(isSelected ? AppTheme.accentDim.opacity(0.2) : AppTheme.surface)
+            .cornerRadius(12)
             .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(AppTheme.border, lineWidth: 1)
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(isSelected ? AppTheme.accent : AppTheme.border, lineWidth: 1)
             )
         }
-        .frame(width: 120)
         .contextMenu {
             Button(role: .destructive) {
                 showDeleteAlert = true

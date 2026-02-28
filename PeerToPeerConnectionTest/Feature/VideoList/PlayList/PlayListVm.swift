@@ -93,4 +93,29 @@ class PlayListVm: ObservableObject {
             })
             .store(in: &cancellables)
     }
+
+    func addVideosToPlaylist(playlistId: String, videoIds: [String]) {
+        guard let playlist = playlists.first(where: { $0.id == playlistId }) else { return }
+        
+        var updatedVideoIds = playlist.videoIds
+        for vid in videoIds {
+            if !updatedVideoIds.contains(vid) {
+                updatedVideoIds.append(vid)
+            }
+        }
+        
+        let updatedPlaylist = PlaylistModelData(id: playlist.id, name: playlist.name, videoIds: updatedVideoIds)
+        let coreDataModel = updatedPlaylist.toCoreDataModel()
+        
+        dataManager?.updatePlaylist(updatedData: coreDataModel)
+            .receive(on: DispatchQueue.main)
+            .sink(receiveCompletion: { completion in
+                if case .failure(let error) = completion {
+                    debugPrint("❌ Failed to add videos to playlist: \(error)")
+                }
+            }, receiveValue: { [weak self] _ in
+                self?.fetchPlaylists()
+            })
+            .store(in: &cancellables)
+    }
 }
