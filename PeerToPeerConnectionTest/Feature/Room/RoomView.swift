@@ -6,7 +6,7 @@ internal import AVFoundation
 struct RoomView: View {
     @EnvironmentObject var service: MultipeerService
     @EnvironmentObject var videoStore: VideoStore
-    @StateObject private var videoPlayer = SyncedVideoPlayer()
+    @StateObject private var videoPlayer = VideoPlayerVM()
     @State private var selectedTab: RoomTab = .video
     @State private var selectedVideo: VideoItem? = nil
     @State private var showVideoSelectionSheet = false
@@ -230,30 +230,10 @@ struct RoomView: View {
     }
     
     // MARK: - Video Loading Helpers
-    
-    private func resolveBookmark(_ bookmarkData: Data) throws -> URL {
-        var isStale = false
-        let resolvedURL = try URL(
-            resolvingBookmarkData: bookmarkData,
-            options: .withoutUI,
-            relativeTo: nil,
-            bookmarkDataIsStale: &isStale
-        )
-        
-        if isStale {
-            throw NSError(domain: "VideoLoadError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Bookmark is stale"])
-        }
-        
-        guard resolvedURL.startAccessingSecurityScopedResource() else {
-            throw NSError(domain: "VideoLoadError", code: 2, userInfo: [NSLocalizedDescriptionKey: "Failed to access security-scoped resource"])
-        }
-        
-        return resolvedURL
-    }
-    
+
     private func loadVideoForMaster(_ videoItem: VideoItem) {
         do {
-            let url = try resolveBookmark(videoItem.bookmarkURL)
+            let url = try BookmarkResolver.resolve(videoItem.bookmarkURL)
             videoPlayer.loadVideo(url: url, videoName: videoItem.name)
             selectedVideo = videoItem
             
@@ -283,13 +263,13 @@ private func videoNamesMatch(_ a: String?, _ b: String?) -> Bool {
 // MARK: - VideoSyncDelegate Wrapper
 
 class VideoSyncDelegateWrapper: VideoSyncDelegate {
-    weak var player: SyncedVideoPlayer?
+    weak var player: VideoPlayerVM?
     let videoStore: VideoStore
     let onLoadVideo: (String) -> Void
     var onVideoLoaded: ((VideoItem, URL) -> Void)?
     var onError: ((String) -> Void)?
-    
-    init(player: SyncedVideoPlayer, videoStore: VideoStore, onLoadVideo: @escaping (String) -> Void) {
+
+    init(player: VideoPlayerVM, videoStore: VideoStore, onLoadVideo: @escaping (String) -> Void) {
         self.player = player
         self.videoStore = videoStore
         self.onLoadVideo = onLoadVideo
@@ -366,27 +346,11 @@ class VideoSyncDelegateWrapper: VideoSyncDelegate {
             }
             
             print("✅ Found video in store: \(videoItem.name)")
-            
-            // Resolve bookmark
+
             do {
-                var isStale = false
-                let resolvedURL = try URL(
-                    resolvingBookmarkData: videoItem.bookmarkURL,
-                    options: .withoutUI,
-                    relativeTo: nil,
-                    bookmarkDataIsStale: &isStale
-                )
-                
-                if isStale {
-                    throw NSError(domain: "VideoLoadError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Bookmark is stale"])
-                }
-                
-                guard resolvedURL.startAccessingSecurityScopedResource() else {
-                    throw NSError(domain: "VideoLoadError", code: 2, userInfo: [NSLocalizedDescriptionKey: "Failed to access security-scoped resource"])
-                }
-                
+                let resolvedURL = try BookmarkResolver.resolve(videoItem.bookmarkURL)
                 print("✅ Bookmark resolved successfully: \(resolvedURL)")
-                
+
                 DispatchQueue.main.async {
                     // Load video
                     player.loadVideo(url: resolvedURL, videoName: videoItem.name)
@@ -444,27 +408,11 @@ class VideoSyncDelegateWrapper: VideoSyncDelegate {
         }
         
         print("✅ Found video in store: \(videoItem.name)")
-        
-        // Resolve bookmark
+
         do {
-            var isStale = false
-            let resolvedURL = try URL(
-                resolvingBookmarkData: videoItem.bookmarkURL,
-                options: .withoutUI,
-                relativeTo: nil,
-                bookmarkDataIsStale: &isStale
-            )
-            
-            if isStale {
-                throw NSError(domain: "VideoLoadError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Bookmark is stale"])
-            }
-            
-            guard resolvedURL.startAccessingSecurityScopedResource() else {
-                throw NSError(domain: "VideoLoadError", code: 2, userInfo: [NSLocalizedDescriptionKey: "Failed to access security-scoped resource"])
-            }
-            
+            let resolvedURL = try BookmarkResolver.resolve(videoItem.bookmarkURL)
             print("✅ Bookmark resolved successfully: \(resolvedURL)")
-            
+
             DispatchQueue.main.async {
                 self.onVideoLoaded?(videoItem, resolvedURL)
             }
