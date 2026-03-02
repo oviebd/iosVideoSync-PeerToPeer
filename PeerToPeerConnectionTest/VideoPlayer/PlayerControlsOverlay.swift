@@ -10,35 +10,37 @@ internal import SwiftUI
 struct PlayerControlsOverlay: View {
     @ObservedObject var viewModel: VideoPlayerVM
     let role: PlayerRole
-    var onSelectVideo: (() -> Void)? = nil
     var onEnterFullScreen: (() -> Void)? = nil
 
     var body: some View {
-        ZStack(alignment: .bottom) {
+        ZStack {
             // Gradient scrim so controls stay readable over bright video
             LinearGradient(
-                colors: [.clear, Color.black.opacity(0.7)],
+                colors: [.black.opacity(0.4), .clear, .black.opacity(0.6)],
                 startPoint: .top,
                 endPoint: .bottom
             )
             .allowsHitTesting(false)
 
-            VStack(spacing: 12) {
-                Spacer(minLength: 0)
-
-                // Top strip
+            VStack(spacing: 0) {
+                // Top strip - Title at top left
                 topStrip
+                    .padding(.top, 16)
 
-                // Center row — playback (master) or sync status (slave)
+                Spacer()
+
+                // Center row — playback controls (white)
                 centerRow
 
-                // Progress / scrubber row (master only)
+                Spacer()
+
+                // Bottom row — Unified Seekbar, times, same line
                 if role == .master {
-                    progressRow
+                    bottomRow
+                        .padding(.bottom, 16)
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 12)
+            .padding(.horizontal, 16)
         }
     }
 
@@ -46,104 +48,96 @@ struct PlayerControlsOverlay: View {
 
     private var topStrip: some View {
         HStack {
-            Text(viewModel.currentVideoName ?? "No video selected")
-                .font(.system(size: 12, design: .monospaced))
-                .foregroundColor(.white)
-                .lineLimit(1)
-                .truncationMode(.tail)
-
-            Spacer()
-
-            HStack(spacing: 8) {
-                if role == .master, let onSelectVideo = onSelectVideo {
-                    Button(action: onSelectVideo) {
-                        Text("Select Video")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(AppTheme.accent)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(AppTheme.accentDim.opacity(0.5))
-                            .cornerRadius(6)
-                    }
-                }
-
-                if let onEnterFullScreen = onEnterFullScreen {
-                    Button(action: onEnterFullScreen) {
-                        Image(systemName: "arrow.up.left.and.arrow.down.right")
-                            .font(.system(size: 18, weight: .medium))
-                            .foregroundColor(.white)
-                            .padding(8)
-                            .background(Color.black.opacity(0.5))
-                            .clipShape(Circle())
+            VStack(alignment: .leading, spacing: 4) {
+                Text(viewModel.currentVideoName ?? "No video selected")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                
+                if role == .slave {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(viewModel.isRemoteSeeking ? AppTheme.warning : AppTheme.accent)
+                            .frame(width: 6, height: 6)
+                        Text(viewModel.isRemoteSeeking ? "Master seeking…" : "Synced with master")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.white.opacity(0.8))
                     }
                 }
             }
+            Spacer()
         }
     }
 
     // MARK: - Center Row
 
     private var centerRow: some View {
-        Group {
+        HStack(spacing: 48) {
             if role == .master {
-                HStack(spacing: 24) {
-                    Button(action: { viewModel.masterBackward(10) }) {
-                        Image(systemName: "gobackward.10")
-                            .font(.system(size: 24))
-                            .foregroundColor(AppTheme.accent)
-                    }
-
-                    Button(action: {
-                        if viewModel.isPlaying {
-                            viewModel.masterPause()
-                        } else {
-                            viewModel.masterPlay()
-                        }
-                    }) {
-                        Image(systemName: viewModel.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                            .font(.system(size: 56))
-                            .foregroundColor(AppTheme.accent)
-                    }
-
-                    Button(action: { viewModel.masterForward(10) }) {
-                        Image(systemName: "goforward.10")
-                            .font(.system(size: 24))
-                            .foregroundColor(AppTheme.accent)
-                    }
+                Button(action: { viewModel.masterBackward(10) }) {
+                    Image(systemName: "gobackward.10")
+                        .font(.system(size: 28, weight: .light))
+                        .foregroundColor(.white)
                 }
-            } else {
-                HStack(spacing: 8) {
-                    Image(systemName: viewModel.isRemoteSeeking ? "hourglass" : "lock.fill")
-                        .font(.system(size: 14))
-                    Text(viewModel.isRemoteSeeking ? "Master seeking…" : "Synced with master")
-                        .font(.system(size: 12, weight: .medium))
+
+                Button(action: {
+                    if viewModel.isPlaying {
+                        viewModel.masterPause()
+                    } else {
+                        viewModel.masterPlay()
+                    }
+                }) {
+                    Image(systemName: viewModel.isPlaying ? "pause.fill" : "play.fill")
+                        .font(.system(size: 48))
+                        .foregroundColor(.white)
                 }
-                .foregroundColor(viewModel.isRemoteSeeking ? AppTheme.warning : AppTheme.accent)
+
+                Button(action: { viewModel.masterForward(10) }) {
+                    Image(systemName: "goforward.10")
+                        .font(.system(size: 28, weight: .light))
+                        .foregroundColor(.white)
+                }
             }
         }
     }
 
-    // MARK: - Progress Row
+    // MARK: - Bottom Row
 
-    private var progressRow: some View {
-        VStack(spacing: 6) {
-            Slider(
+    private var bottomRow: some View {
+        HStack(spacing: 12) {
+            // Elapsed Time
+            Text(formatTime(viewModel.currentTime))
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundColor(.white)
+                .frame(width: 45, alignment: .leading)
+
+            // Seekbar (Custom VideoSeekbar)
+            VideoSeekbar(
                 value: Binding(
                     get: { viewModel.currentTime },
                     set: { viewModel.masterSeek(to: $0) }
                 ),
-                in: 0...max(viewModel.duration, 1)
+                range: 0...max(viewModel.duration, 1),
+                onEditingChanged: { isEditing in
+                    viewModel.isSeeking = isEditing
+                }
             )
-            .tint(AppTheme.accent)
 
-            HStack {
-                Text(formatTime(viewModel.currentTime))
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundColor(.white.opacity(0.9))
-                Spacer()
-                Text(formatTime(viewModel.duration))
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundColor(.white.opacity(0.9))
+            // Total Time
+            Text(formatTime(viewModel.duration))
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundColor(.white)
+                .frame(width: 45, alignment: .trailing)
+
+            // Full Screen Button at bottom right
+            if let onEnterFullScreen = onEnterFullScreen {
+                Button(action: onEnterFullScreen) {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.white)
+                        .padding(8)
+                }
             }
         }
     }

@@ -17,23 +17,37 @@ struct RoomView: View {
     enum RoomTab { case video, devices }
     
     var body: some View {
-        ZStack {
-            AppTheme.bg.ignoresSafeArea()
-            GridPattern().ignoresSafeArea().opacity(0.05)
-            
-            VStack(spacing: 0) {
-                roomHeader
-                tabBar
+        NavigationStack {
+            ZStack {
+                AppTheme.bg.ignoresSafeArea()
+                GridPattern().ignoresSafeArea().opacity(0.05)
                 
-                switch selectedTab {
-                case .video:    VideoRoomView(videoPlayer: videoPlayer, onSelectVideo: {
-                    showVideoSelectionSheet = true
-                })
-                case .devices:  DevicesTab()
+                VStack(spacing: 0) {
+                    roomHeader
+                    tabBar
+                    
+                    switch selectedTab {
+                    case .video:    VideoRoomView(videoPlayer: videoPlayer)
+                    case .devices:  DevicesTab()
+                    }
+                }
+            }
+            .environmentObject(service)
+            .toolbar {
+                if service.role == .master {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button(action: { showVideoSelectionSheet = true }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "film.stack")
+                                Text("Select Video")
+                                    .font(.system(size: 14, weight: .semibold))
+                            }
+                            .foregroundColor(AppTheme.accent)
+                        }
+                    }
                 }
             }
         }
-        .environmentObject(service)
         .onAppear {
             // Set up video sync delegate
             print("🔧 Setting up video sync:")

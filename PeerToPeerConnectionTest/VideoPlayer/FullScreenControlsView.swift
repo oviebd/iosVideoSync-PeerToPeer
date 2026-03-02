@@ -41,142 +41,127 @@ struct FullScreenControlsView: View {
     }
 
     private var controlsOverlay: some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .bottom) {
-                Color.clear
-                    .contentShape(Rectangle())
-                    .onTapGesture { visibilityManager.toggle() }
+        ZStack {
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture { visibilityManager.toggle() }
 
-                LinearGradient(
-                    colors: [.clear, Color.black.opacity(0.7)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .allowsHitTesting(false)
+            LinearGradient(
+                colors: [.black.opacity(0.4), .clear, .black.opacity(0.6)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .allowsHitTesting(false)
 
-                VStack(spacing: 12) {
-                Spacer(minLength: 0)
-
-                // Top row
+            VStack(spacing: 0) {
+                // Top strip - Title at top left
                 topRow
+                    .padding(.top, 40) // Space for notch/status bar in full screen
 
-                // Center row
+                Spacer()
+
+                // Center row — playback controls (white)
                 centerRow
 
-                // Bottom bar
-                bottomBar
+                Spacer()
+
+                // Bottom row — Unified Seekbar, times, same line
+                if role == .master {
+                    bottomBar
+                        .padding(.bottom, 24)
+                }
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 16)
-            }
-            .frame(width: geometry.size.width, height: geometry.size.height)
+            .padding(.horizontal, 24)
         }
         .ignoresSafeArea()
     }
 
     private var topRow: some View {
-        HStack {
-            Button(action: onDismiss) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 22))
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(viewModel.currentVideoName ?? "No video selected")
+                    .font(.system(size: 16, weight: .bold))
                     .foregroundColor(.white)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                
+                if role == .slave {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(viewModel.isRemoteSeeking ? AppTheme.warning : AppTheme.accent)
+                            .frame(width: 6, height: 6)
+                        Text(viewModel.isRemoteSeeking ? "Master seeking…" : "Synced with master")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(.white.opacity(0.8))
+                    }
+                }
             }
-
             Spacer()
-
-            Text(viewModel.currentVideoName ?? "No video selected")
-                .font(.system(size: 12, design: .monospaced))
-                .foregroundColor(.white)
-                .lineLimit(1)
-                .truncationMode(.tail)
         }
     }
 
     private var centerRow: some View {
-        Group {
+        HStack(spacing: 64) {
             if role == .master {
-                HStack(spacing: 24) {
-                    Button(action: { viewModel.masterBackward(10) }) {
-                        Image(systemName: "gobackward.10")
-                            .font(.system(size: 24))
-                            .foregroundColor(AppTheme.accent)
-                    }
-
-                    Button(action: {
-                        if viewModel.isPlaying {
-                            viewModel.masterPause()
-                        } else {
-                            viewModel.masterPlay()
-                        }
-                    }) {
-                        Image(systemName: viewModel.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                            .font(.system(size: 64))
-                            .foregroundColor(AppTheme.accent)
-                    }
-
-                    Button(action: { viewModel.masterForward(10) }) {
-                        Image(systemName: "goforward.10")
-                            .font(.system(size: 24))
-                            .foregroundColor(AppTheme.accent)
-                    }
+                Button(action: { viewModel.masterBackward(10) }) {
+                    Image(systemName: "gobackward.10")
+                        .font(.system(size: 32, weight: .light))
+                        .foregroundColor(.white)
                 }
-            } else {
-                HStack(spacing: 8) {
-                    Image(systemName: viewModel.isRemoteSeeking ? "hourglass" : "lock.fill")
-                        .font(.system(size: 14))
-                    Text(viewModel.isRemoteSeeking ? "Master seeking…" : "Synced with master")
-                        .font(.system(size: 12, weight: .medium))
+
+                Button(action: {
+                    if viewModel.isPlaying {
+                        viewModel.masterPause()
+                    } else {
+                        viewModel.masterPlay()
+                    }
+                }) {
+                    Image(systemName: viewModel.isPlaying ? "pause.fill" : "play.fill")
+                        .font(.system(size: 56))
+                        .foregroundColor(.white)
                 }
-                .foregroundColor(viewModel.isRemoteSeeking ? AppTheme.warning : AppTheme.accent)
+
+                Button(action: { viewModel.masterForward(10) }) {
+                    Image(systemName: "goforward.10")
+                        .font(.system(size: 32, weight: .light))
+                        .foregroundColor(.white)
+                }
             }
         }
     }
 
     private var bottomBar: some View {
-        VStack(spacing: 8) {
-            if role == .master {
-                Slider(
-                    value: Binding(
-                        get: { viewModel.currentTime },
-                        set: { viewModel.masterSeek(to: $0) }
-                    ),
-                    in: 0...max(viewModel.duration, 1)
-                )
-                .tint(AppTheme.accent)
-
-                HStack {
-                    Text(formatTime(viewModel.currentTime))
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundColor(.white.opacity(0.9))
-                    Spacer()
-                    Text(formatTime(viewModel.duration))
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundColor(.white.opacity(0.9))
-                }
-            }
-
-            HStack(spacing: 12) {
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(viewModel.isReady ? AppTheme.accent : AppTheme.warning)
-                        .frame(width: 5, height: 5)
-                    Text(viewModel.isReady ? "READY" : "LOAD")
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
-                        .tracking(1)
-                }
+        HStack(spacing: 16) {
+            // Elapsed Time
+            Text(formatTime(viewModel.currentTime))
+                .font(.system(size: 13, design: .monospaced))
                 .foregroundColor(.white)
+                .frame(width: 50, alignment: .leading)
 
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(role == .master ? AppTheme.accent : AppTheme.warning)
-                        .frame(width: 5, height: 5)
-                    Text(role == .master ? "MASTER" : "SLAVE")
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
-                        .tracking(1)
+            // Seekbar (Custom VideoSeekbar)
+            VideoSeekbar(
+                value: Binding(
+                    get: { viewModel.currentTime },
+                    set: { viewModel.masterSeek(to: $0) }
+                ),
+                range: 0...max(viewModel.duration, 1),
+                onEditingChanged: { isEditing in
+                    viewModel.isSeeking = isEditing
                 }
-                .foregroundColor(.white)
+            )
 
-                Spacer()
+            // Total Time
+            Text(formatTime(viewModel.duration))
+                .font(.system(size: 13, design: .monospaced))
+                .foregroundColor(.white)
+                .frame(width: 50, alignment: .trailing)
+
+            // Close (Dismiss) Button at bottom right
+            Button(action: onDismiss) {
+                Image(systemName: "multiply")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundColor(.white)
+                    .padding(8)
             }
         }
     }

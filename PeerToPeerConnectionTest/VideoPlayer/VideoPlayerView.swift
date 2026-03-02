@@ -20,7 +20,6 @@ enum PlayerRole {
 struct VideoPlayerView: View {
     @ObservedObject var viewModel: VideoPlayerVM
     let role: PlayerRole
-    var onSelectVideo: (() -> Void)? = nil
 
     @StateObject private var visibilityManager = ControlsVisibilityManager()
 
@@ -34,7 +33,6 @@ struct VideoPlayerView: View {
                 PlayerControlsOverlay(
                     viewModel: viewModel,
                     role: role,
-                    onSelectVideo: onSelectVideo,
                     onEnterFullScreen: enterFullScreen
                 )
                 .transition(.opacity)

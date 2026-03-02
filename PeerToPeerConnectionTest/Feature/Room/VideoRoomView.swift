@@ -12,56 +12,53 @@ struct VideoRoomView: View {
     @EnvironmentObject var service: MultipeerService
     @ObservedObject var videoPlayer: VideoPlayerVM
     @State private var showLog: Bool = false
-    var onSelectVideo: (() -> Void)?
 
     var body: some View {
-        GeometryReader { geometry in
-            let videoHeight = geometry.size.height * 0.35
-            VStack(spacing: 0) {
-                // Command Log toggle button
-                HStack {
-                    Spacer()
-                    Button(action: {
-                        withAnimation(.spring()) {
-                            showLog.toggle()
-                        }
-                    }) {
-                        HStack(spacing: 6) {
-                            Image(systemName: showLog ? "terminal.fill" : "terminal")
-                            Text(showLog ? "Hide Log" : "Show Log")
-                                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        }
-                        .foregroundColor(showLog ? AppTheme.accent : AppTheme.textDim)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(AppTheme.surface)
-                        .cornerRadius(6)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6)
-                                .stroke(showLog ? AppTheme.accent.opacity(0.3) : AppTheme.border, lineWidth: 1)
-                        )
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                }
-
-                if showLog {
-                    commandLogView
-                        .frame(height: 180)
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                }
-
-                VideoPlayerView(
-                    viewModel: videoPlayer,
-                    role: service.role == .master ? .master : .slave,
-                    onSelectVideo: onSelectVideo
-                )
-                .frame(height: videoHeight)
-
-                statusBar
-
+        VStack(spacing: 0) {
+            // Command Log toggle button
+            HStack {
                 Spacer()
+                Button(action: {
+                    withAnimation(.spring()) {
+                        showLog.toggle()
+                    }
+                }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: showLog ? "terminal.fill" : "terminal")
+                        Text(showLog ? "Hide Log" : "Show Log")
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    }
+                    .foregroundColor(showLog ? AppTheme.accent : AppTheme.textDim)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(AppTheme.surface)
+                    .cornerRadius(6)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(showLog ? AppTheme.accent.opacity(0.3) : AppTheme.border, lineWidth: 1)
+                    )
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
             }
+
+            if showLog {
+                commandLogView
+                    .frame(height: 180)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+
+            VideoPlayerView(
+                viewModel: videoPlayer,
+                role: service.role == .master ? .master : .slave
+            )
+            .aspectRatio(16/9, contentMode: .fit)
+            .frame(maxWidth: .infinity)
+            .background(Color.black)
+
+            statusBar
+
+            Spacer()
         }
         .background(AppTheme.bg.ignoresSafeArea())
     }
