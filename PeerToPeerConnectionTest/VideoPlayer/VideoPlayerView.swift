@@ -60,26 +60,45 @@ struct VideoPlayerView: View {
         .onDisappear {
             visibilityManager.cancel()
         }
+        .fullScreenCover(isPresented: fullScreenBinding) {
+            ZStack {
+                Color.black
+                    .ignoresSafeArea()
+                FullScreenPlayerRepresentable(
+                    player: viewModel.player,
+                    viewModel: viewModel,
+                    role: role,
+                    onDismiss: { fullScreenDismiss() }
+                )
+                .ignoresSafeArea()
+            }
+            .presentationBackground(Color.black)
+        }
+    }
+
+    private var fullScreenBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.isFullScreen },
+            set: { newValue in
+                viewModel.isFullScreen = newValue
+                if !newValue, role == .master {
+                    viewModel.service?.sendSetFullScreenCommand(isFullScreen: false)
+                }
+            }
+        )
     }
 
     private func enterFullScreen() {
-        guard
-            let scene = UIApplication.shared.connectedScenes
-                .compactMap({ $0 as? UIWindowScene }).first,
-            let root = scene.windows.first(where: \.isKeyWindow)?.rootViewController
-        else { return }
+        viewModel.isFullScreen = true
+        if role == .master {
+            viewModel.service?.sendSetFullScreenCommand(isFullScreen: true)
+        }
+    }
 
-        AppDelegate.orientationLock = .landscape
-
-        let fsVC = FullScreenPlayerVC(
-            player: viewModel.player,
-            viewModel: viewModel,
-            role: role
-        )
-        fsVC.onDismiss = { fsVC.dismiss(animated: true) }
-
-        var top = root
-        while let next = top.presentedViewController { top = next }
-        top.present(fsVC, animated: true)
+    private func fullScreenDismiss() {
+        viewModel.isFullScreen = false
+        if role == .master {
+            viewModel.service?.sendSetFullScreenCommand(isFullScreen: false)
+        }
     }
 }

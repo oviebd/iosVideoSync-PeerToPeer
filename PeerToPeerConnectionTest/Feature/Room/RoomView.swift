@@ -18,6 +18,7 @@ struct RoomView: View {
     @State private var showVideoLoadError = false
     @State private var videoLoadErrorMessage = ""
     @State private var videoDelegateWrapper: VideoSyncDelegateWrapper?
+    @State private var slavePlaylistInfo: PlaylistInfo? = nil
     
     enum RoomTab { case video, devices }
     
@@ -34,8 +35,8 @@ struct RoomView: View {
                     switch selectedTab {
                     case .video:    VideoRoomView(
                         videoPlayer: videoPlayer,
-                        activePlaylistName: activePlaylist?.name,
-                        onShowPlaylistQueue: activePlaylist != nil ? { showPlaylistQueue = true } : nil
+                        currentPlaylistInfo: currentPlaylistInfo,
+                        onShowPlaylistQueue: currentPlaylistInfo != nil ? { showPlaylistQueue = true } : nil
                     )
                     case .devices:  DevicesTab()
                     }
@@ -84,6 +85,12 @@ struct RoomView: View {
                 showVideoLoadError = true
             }
             
+            wrapper.onPlaylistInfoReceived = { info in
+                DispatchQueue.main.async {
+                    self.slavePlaylistInfo = info
+                }
+            }
+            
             videoDelegateWrapper = wrapper
             service.videoDelegate = wrapper
             
@@ -94,7 +101,7 @@ struct RoomView: View {
                     let position = self.videoPlayer.currentTime
                     let isPlaying = self.videoPlayer.isPlaying
                     if !videoName.isEmpty {
-                        self.service.sendVideoInfoResponse(videoName: videoName, position: position, isPlaying: isPlaying)
+                        self.service.sendVideoInfoResponse(videoName: videoName, position: position, isPlaying: isPlaying, playlistInfo: self.makePlaylistInfo(), isFullScreen: self.videoPlayer.isFullScreen)
                         print("✅ Responded to video info request: \(videoName) at \(position)s, isPlaying: \(isPlaying)")
                     } else {
                         print("⚠️ No video selected, cannot respond to video info request")
@@ -107,7 +114,7 @@ struct RoomView: View {
                 if self.service.role == .master, let videoName = self.selectedVideo?.name, !videoName.isEmpty {
                     let position = self.videoPlayer.currentTime
                     let isPlaying = self.videoPlayer.isPlaying
-                    self.service.sendVideoInfoResponse(videoName: videoName, position: position, isPlaying: isPlaying, toPeer: peerID)
+                    self.service.sendVideoInfoResponse(videoName: videoName, position: position, isPlaying: isPlaying, playlistInfo: self.makePlaylistInfo(), isFullScreen: self.videoPlayer.isFullScreen, toPeer: peerID)
                 }
             }
             
@@ -122,13 +129,24 @@ struct RoomView: View {
             // When video becomes ready, broadcast to slaves (master only)
             // Only broadcast if we have a selected video and peers are connected
             if newValue, service.role == .master, let videoName = selectedVideo?.name, !service.connectedPeers.isEmpty {
-                service.sendLoadVideoCommand(videoName: videoName)
+                service.sendLoadVideoCommand(videoName: videoName, playlistInfo: makePlaylistInfo(), isFullScreen: videoPlayer.isFullScreen)
                 print("✅ Video ready, broadcasted: \(videoName)")
             }
             // Auto-play when advancing playlist or when selecting a playlist
             if newValue, shouldAutoPlayAfterAdvance {
                 videoPlayer.masterPlay()
                 shouldAutoPlayAfterAdvance = false
+                // Send videoInfoResponse so slave gets play state when its video is ready
+                // (play command alone may arrive before slave finishes loading)
+                if let videoName = selectedVideo?.name, !service.connectedPeers.isEmpty {
+                    service.sendVideoInfoResponse(
+                        videoName: videoName,
+                        position: videoPlayer.currentTime,
+                        isPlaying: true,
+                        playlistInfo: makePlaylistInfo(),
+                        isFullScreen: videoPlayer.isFullScreen
+                    )
+                }
             }
         }
         .onChange(of: service.connectedPeers.count) { oldValue, newValue in
@@ -142,6 +160,7 @@ struct RoomView: View {
             print("🔧 Cleaning up video sync")
             videoPlayer.player.pause()
             videoPlayer.stopBroadcasting()
+            videoDelegateWrapper?.onPlaylistInfoReceived = nil
             service.videoDelegate = nil
             service.onVideoInfoRequest = nil
             service.onPeerConnected = nil
@@ -166,11 +185,17 @@ struct RoomView: View {
             )
         }
         .sheet(isPresented: $showPlaylistQueue) {
-            if let playlist = activePlaylist {
+            if service.role == .master, let playlist = activePlaylist {
                 PlaylistQueueSheet(
                     playlist: playlist,
                     videos: resolveVideos(from: playlist),
                     currentIndex: playlistIndex,
+                    onDismiss: { showPlaylistQueue = false }
+                )
+            } else if let info = slavePlaylistInfo {
+                PlaylistQueueSheet(
+                    playlistInfo: info,
+                    currentVideoName: selectedVideo?.name,
                     onDismiss: { showPlaylistQueue = false }
                 )
             }
@@ -292,6 +317,17 @@ struct RoomView: View {
     
     // MARK: - Playlist Helpers
 
+    private func makePlaylistInfo() -> PlaylistInfo? {
+        guard let playlist = activePlaylist else { return nil }
+        let names = resolveVideos(from: playlist).map { $0.name }
+        return PlaylistInfo(playlistName: playlist.name, videoNames: names)
+    }
+
+    private var currentPlaylistInfo: PlaylistInfo? {
+        if service.role == .master { return makePlaylistInfo() }
+        return slavePlaylistInfo
+    }
+
     private var currentPlaylistVideo: VideoItem? {
         guard let playlist = activePlaylist else { return nil }
         let videos = resolveVideos(from: playlist)
@@ -359,6 +395,7 @@ class VideoSyncDelegateWrapper: VideoSyncDelegate {
     let onLoadVideo: (String) -> Void
     var onVideoLoaded: ((VideoItem, URL) -> Void)?
     var onError: ((String) -> Void)?
+    var onPlaylistInfoReceived: ((PlaylistInfo?) -> Void)?
 
     init(player: VideoPlayerVM, videoStore: VideoStore, onLoadVideo: @escaping (String) -> Void) {
         self.player = player
@@ -371,7 +408,7 @@ class VideoSyncDelegateWrapper: VideoSyncDelegate {
         player?.didReceiveVideoCommand(command)
     }
     
-    func didReceiveVideoInfoResponse(videoName: String, position: Double, isPlaying: Bool) {
+    func didReceiveVideoInfoResponse(videoName: String, position: Double, isPlaying: Bool, playlistInfo: PlaylistInfo?, isFullScreen: Bool?) {
         print("📹 VideoSyncDelegateWrapper: Received video info response")
         print("   Video name: \(videoName)")
         print("   Position: \(position)s, isPlaying: \(isPlaying)")
@@ -423,6 +460,10 @@ class VideoSyncDelegateWrapper: VideoSyncDelegate {
                 print("   Position already synced (diff: \(diff)s)")
                 DispatchQueue.main.async { applyPlayState() }
             }
+            DispatchQueue.main.async {
+                self.onPlaylistInfoReceived?(playlistInfo)
+                if let full = isFullScreen { player.isFullScreen = full }
+            }
         } else {
             print("📹 Video not loaded, loading: \(videoName)")
             
@@ -471,12 +512,14 @@ class VideoSyncDelegateWrapper: VideoSyncDelegate {
                             timer.invalidate()
                             print("   ⚠️ Video did not become ready in time")
                             self.onError?("Video loaded but did not become ready")
+                                }
+                            }
+                            
+                            self.onVideoLoaded?(videoItem, resolvedURL)
+                            self.onPlaylistInfoReceived?(playlistInfo)
+                            if let full = isFullScreen { player.isFullScreen = full }
                         }
-                    }
-                    
-                    self.onVideoLoaded?(videoItem, resolvedURL)
-                }
-            } catch {
+                    } catch {
                 print("❌ Failed to resolve bookmark: \(error.localizedDescription)")
                 DispatchQueue.main.async {
                     self.onError?("Failed to load video: \(error.localizedDescription)")
@@ -484,9 +527,19 @@ class VideoSyncDelegateWrapper: VideoSyncDelegate {
             }
         }
     }
+
+    func didReceiveSetFullScreen(isFullScreen: Bool) {
+        DispatchQueue.main.async {
+            self.player?.isFullScreen = isFullScreen
+        }
+    }
     
-    func didReceiveLoadVideoCommand(videoName: String) {
+    func didReceiveLoadVideoCommand(videoName: String, playlistInfo: PlaylistInfo?, isFullScreen: Bool?) {
         print("📹 VideoSyncDelegateWrapper: Received loadVideo command for: \(videoName)")
+        DispatchQueue.main.async {
+            self.onPlaylistInfoReceived?(playlistInfo)
+            if let full = isFullScreen, let player = self.player { player.isFullScreen = full }
+        }
         
         // Search VideoStore for the video (case-insensitive, extension ignored)
         guard let videoItem = videoStore.videos.first(where: { videoNamesMatch($0.name, videoName) }) else {
@@ -506,6 +559,7 @@ class VideoSyncDelegateWrapper: VideoSyncDelegate {
 
             DispatchQueue.main.async {
                 self.onVideoLoaded?(videoItem, resolvedURL)
+                if let full = isFullScreen, let p = self.player { p.isFullScreen = full }
             }
         } catch {
             print("❌ Failed to resolve bookmark: \(error.localizedDescription)")

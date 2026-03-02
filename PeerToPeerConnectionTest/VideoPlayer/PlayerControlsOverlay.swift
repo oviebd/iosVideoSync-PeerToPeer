@@ -34,11 +34,9 @@ struct PlayerControlsOverlay: View {
 
                 Spacer()
 
-                // Bottom row — Unified Seekbar, times, same line
-                if role == .master {
-                    bottomRow
-                        .padding(.bottom, 16)
-                }
+                // Bottom row — Unified Seekbar, times (always shown; slave is read-only)
+                bottomRow
+                    .padding(.bottom, 16)
             }
             .padding(.horizontal, 16)
         }
@@ -112,17 +110,30 @@ struct PlayerControlsOverlay: View {
                 .foregroundColor(.white)
                 .frame(width: 45, alignment: .leading)
 
-            // Seekbar (Custom VideoSeekbar)
-            VideoSeekbar(
-                value: Binding(
-                    get: { viewModel.currentTime },
-                    set: { viewModel.masterSeek(to: $0) }
-                ),
-                range: 0...max(viewModel.duration, 1),
-                onEditingChanged: { isEditing in
-                    viewModel.isSeeking = isEditing
+            // Seekbar (read-only for slave, interactive for master)
+            Group {
+                if role == .master {
+                    VideoSeekbar(
+                        value: Binding(
+                            get: { viewModel.currentTime },
+                            set: { viewModel.masterSeek(to: $0) }
+                        ),
+                        range: 0...max(viewModel.duration, 1),
+                        onEditingChanged: { isEditing in
+                            viewModel.isSeeking = isEditing
+                        }
+                    )
+                } else {
+                    VideoSeekbar(
+                        value: Binding(
+                            get: { viewModel.currentTime },
+                            set: { _ in }
+                        ),
+                        range: 0...max(viewModel.duration, 1)
+                    )
+                    .allowsHitTesting(false)
                 }
-            )
+            }
 
             // Total Time
             Text(formatTime(viewModel.duration))
@@ -130,8 +141,8 @@ struct PlayerControlsOverlay: View {
                 .foregroundColor(.white)
                 .frame(width: 45, alignment: .trailing)
 
-            // Full Screen Button at bottom right
-            if let onEnterFullScreen = onEnterFullScreen {
+            // Full Screen Button at bottom right (master only; slave follows master's command)
+            if role == .master, let onEnterFullScreen = onEnterFullScreen {
                 Button(action: onEnterFullScreen) {
                     Image(systemName: "arrow.up.left.and.arrow.down.right")
                         .font(.system(size: 16, weight: .semibold))

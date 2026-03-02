@@ -31,6 +31,7 @@ final class FullScreenPlayerVC: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .black
+        view.overrideUserInterfaceStyle = .dark
 
         let layer = AVPlayerLayer(player: player)
         layer.videoGravity = .resizeAspect
@@ -61,14 +62,26 @@ final class FullScreenPlayerVC: UIViewController {
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        playerLayer?.frame = view.bounds
+        playerLayer?.frame = view.layer.bounds
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        // Force layout update after rotation completes for consistent full-screen display on all devices
+        view.setNeedsLayout()
+        view.layoutIfNeeded()
+        playerLayer?.frame = view.layer.bounds
     }
 
     override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
         super.viewWillTransition(to: size, with: coordinator)
         coordinator.animate(alongsideTransition: nil) { [weak self] _ in
-            self?.hostingVC?.view.setNeedsLayout()
-            self?.hostingVC?.view.layoutIfNeeded()
+            guard let self else { return }
+            self.view.setNeedsLayout()
+            self.view.layoutIfNeeded()
+            self.playerLayer?.frame = self.view.layer.bounds
+            self.hostingVC?.view.setNeedsLayout()
+            self.hostingVC?.view.layoutIfNeeded()
         }
     }
 

@@ -18,6 +18,7 @@ class VideoPlayerVM: ObservableObject, VideoSyncDelegate {
     @Published var isReady: Bool = false
     @Published var isRemoteSeeking: Bool = false
     @Published var currentVideoName: String?
+    @Published var isFullScreen: Bool = false
 
     private var timeObserver: Any?
     private var cancellables = Set<AnyCancellable>()
@@ -51,6 +52,12 @@ class VideoPlayerVM: ObservableObject, VideoSyncDelegate {
 
     func loadVideo(url: URL, videoName: String? = nil) {
         player.pause()
+
+        // Reset seek detection state so the position jump (old video end → new video 0)
+        // is not mistaken for a user seek, which would send pause after 1 second
+        seekCompletionTimer?.invalidate()
+        seekCompletionTimer = nil
+        lastPositionObservedAt = 0
 
         if let previousURL = currentSecurityScopedURL {
             previousURL.stopAccessingSecurityScopedResource()
@@ -245,12 +252,16 @@ class VideoPlayerVM: ObservableObject, VideoSyncDelegate {
 
     // MARK: - VideoSyncDelegate
 
-    func didReceiveLoadVideoCommand(videoName: String) {
+    func didReceiveLoadVideoCommand(videoName: String, playlistInfo: PlaylistInfo?, isFullScreen: Bool?) {
         print("⚠️ VideoPlayerVM.didReceiveLoadVideoCommand called directly (should go through wrapper)")
     }
 
-    func didReceiveVideoInfoResponse(videoName: String, position: Double, isPlaying: Bool) {
+    func didReceiveVideoInfoResponse(videoName: String, position: Double, isPlaying: Bool, playlistInfo: PlaylistInfo?, isFullScreen: Bool?) {
         print("⚠️ VideoPlayerVM.didReceiveVideoInfoResponse called directly (should go through wrapper)")
+    }
+
+    func didReceiveSetFullScreen(isFullScreen: Bool) {
+        print("⚠️ VideoPlayerVM.didReceiveSetFullScreen called directly (should go through wrapper)")
     }
 
     func didReceiveVideoCommand(_ command: VideoCommand) {
@@ -317,12 +328,14 @@ class VideoPlayerVM: ObservableObject, VideoSyncDelegate {
             }
             service?.addCommandLog("✅ Called player.seek()")
 
-        case .loadVideo(videoName: _):
+        case .loadVideo(videoName: _, playlistInfo: _, isFullScreen: _):
             return
         case .requestVideoInfo:
             return
-        case .videoInfoResponse(videoName: _, position: _, isPlaying: _):
+        case .videoInfoResponse(videoName: _, position: _, isPlaying: _, playlistInfo: _, isFullScreen: _):
             return
+        case .setFullScreen:
+            return  // Handled by VideoSyncDelegateWrapper
         }
     }
 }

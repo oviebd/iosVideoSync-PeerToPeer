@@ -65,11 +65,9 @@ struct FullScreenControlsView: View {
 
                 Spacer()
 
-                // Bottom row — Unified Seekbar, times, same line
-                if role == .master {
-                    bottomBar
-                        .padding(.bottom, 24)
-                }
+                // Bottom row — Seekbar and times (always shown; slave is read-only)
+                bottomBar
+                    .padding(.bottom, 24)
             }
             .padding(.horizontal, 24)
         }
@@ -138,17 +136,30 @@ struct FullScreenControlsView: View {
                 .foregroundColor(.white)
                 .frame(width: 50, alignment: .leading)
 
-            // Seekbar (Custom VideoSeekbar)
-            VideoSeekbar(
-                value: Binding(
-                    get: { viewModel.currentTime },
-                    set: { viewModel.masterSeek(to: $0) }
-                ),
-                range: 0...max(viewModel.duration, 1),
-                onEditingChanged: { isEditing in
-                    viewModel.isSeeking = isEditing
+            // Seekbar (read-only for slave, interactive for master)
+            Group {
+                if role == .master {
+                    VideoSeekbar(
+                        value: Binding(
+                            get: { viewModel.currentTime },
+                            set: { viewModel.masterSeek(to: $0) }
+                        ),
+                        range: 0...max(viewModel.duration, 1),
+                        onEditingChanged: { isEditing in
+                            viewModel.isSeeking = isEditing
+                        }
+                    )
+                } else {
+                    VideoSeekbar(
+                        value: Binding(
+                            get: { viewModel.currentTime },
+                            set: { _ in }
+                        ),
+                        range: 0...max(viewModel.duration, 1)
+                    )
+                    .allowsHitTesting(false)
                 }
-            )
+            }
 
             // Total Time
             Text(formatTime(viewModel.duration))
@@ -156,12 +167,14 @@ struct FullScreenControlsView: View {
                 .foregroundColor(.white)
                 .frame(width: 50, alignment: .trailing)
 
-            // Close (Dismiss) Button at bottom right
-            Button(action: onDismiss) {
-                Image(systemName: "multiply")
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundColor(.white)
-                    .padding(8)
+            // Close (Dismiss) Button — master only; slave exits when master sends setFullScreen(false)
+            if role == .master {
+                Button(action: onDismiss) {
+                    Image(systemName: "multiply")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundColor(.white)
+                        .padding(8)
+                }
             }
         }
     }

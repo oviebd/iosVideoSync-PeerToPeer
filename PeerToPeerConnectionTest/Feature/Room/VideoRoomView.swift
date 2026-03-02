@@ -11,7 +11,7 @@ internal import SwiftUI
 struct VideoRoomView: View {
     @EnvironmentObject var service: MultipeerService
     @ObservedObject var videoPlayer: VideoPlayerVM
-    var activePlaylistName: String? = nil
+    var currentPlaylistInfo: PlaylistInfo? = nil
     var onShowPlaylistQueue: (() -> Void)? = nil
     @State private var showLog: Bool = false
 
@@ -69,12 +69,12 @@ struct VideoRoomView: View {
 
     private var statusBar: some View {
         HStack(spacing: 12) {
-            if let name = activePlaylistName, let onShow = onShowPlaylistQueue {
+            if let info = currentPlaylistInfo, let onShow = onShowPlaylistQueue {
                 Button(action: onShow) {
                     HStack(spacing: 6) {
                         Image(systemName: "music.note.list")
                             .font(.system(size: 12))
-                        Text(name)
+                        Text(info.playlistName)
                             .font(.system(size: 13, weight: .medium))
                             .lineLimit(1)
                             .truncationMode(.tail)

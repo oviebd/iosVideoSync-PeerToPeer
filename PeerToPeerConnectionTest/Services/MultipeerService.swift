@@ -31,11 +31,12 @@ enum SessionRole {
 enum VideoCommand: Codable, CustomStringConvertible {
     case play(position: Double)
     case pause(position: Double)
-    case seekingStarted  // Master started seeking - pause slaves and show "seeking..."
+    case seekingStarted
     case seek(position: Double)
-    case loadVideo(videoName: String)  // Master broadcasts video name to load
-    case requestVideoInfo  // Slave requests current video info from master
-    case videoInfoResponse(videoName: String, position: Double, isPlaying: Bool)  // Master responds with video name, position, and play state
+    case loadVideo(videoName: String, playlistInfo: PlaylistInfo?, isFullScreen: Bool?)
+    case requestVideoInfo
+    case videoInfoResponse(videoName: String, position: Double, isPlaying: Bool, playlistInfo: PlaylistInfo?, isFullScreen: Bool?)
+    case setFullScreen(isFullScreen: Bool)
     
     var description: String {
         switch self {
@@ -43,9 +44,10 @@ enum VideoCommand: Codable, CustomStringConvertible {
         case .pause(let pos): return "pause(position: \(String(format: "%.1f", pos))s)"
         case .seekingStarted: return "seekingStarted"
         case .seek(let pos): return "seek(position: \(String(format: "%.1f", pos))s)"
-        case .loadVideo(let name): return "loadVideo(videoName: \(name))"
+        case .loadVideo(let name, _, _): return "loadVideo(videoName: \(name))"
         case .requestVideoInfo: return "requestVideoInfo"
-        case .videoInfoResponse(let name, let pos, let playing): return "videoInfoResponse(videoName: \(name), position: \(String(format: "%.1f", pos))s, isPlaying: \(playing))"
+        case .videoInfoResponse(let name, let pos, let playing, _, _): return "videoInfoResponse(videoName: \(name), position: \(String(format: "%.1f", pos))s, isPlaying: \(playing))"
+        case .setFullScreen(let full): return "setFullScreen(isFullScreen: \(full))"
         }
     }
 }
@@ -59,8 +61,9 @@ struct VideoCommandMessage: Codable {
 
 protocol VideoSyncDelegate: AnyObject {
     func didReceiveVideoCommand(_ command: VideoCommand)
-    func didReceiveLoadVideoCommand(videoName: String)
-    func didReceiveVideoInfoResponse(videoName: String, position: Double, isPlaying: Bool)
+    func didReceiveLoadVideoCommand(videoName: String, playlistInfo: PlaylistInfo?, isFullScreen: Bool?)
+    func didReceiveVideoInfoResponse(videoName: String, position: Double, isPlaying: Bool, playlistInfo: PlaylistInfo?, isFullScreen: Bool?)
+    func didReceiveSetFullScreen(isFullScreen: Bool)
 }
 
 // MARK: - MultipeerService
@@ -225,8 +228,12 @@ class MultipeerService: NSObject, ObservableObject {
     }
     
     
-    func sendLoadVideoCommand(videoName: String) {
-        sendVideoCommand(.loadVideo(videoName: videoName))
+    func sendLoadVideoCommand(videoName: String, playlistInfo: PlaylistInfo? = nil, isFullScreen: Bool? = nil) {
+        sendVideoCommand(.loadVideo(videoName: videoName, playlistInfo: playlistInfo, isFullScreen: isFullScreen))
+    }
+
+    func sendSetFullScreenCommand(isFullScreen: Bool) {
+        sendVideoCommand(.setFullScreen(isFullScreen: isFullScreen))
     }
     
     func sendRequestVideoInfoCommand() {
@@ -257,10 +264,10 @@ class MultipeerService: NSObject, ObservableObject {
         }
     }
     
-    func sendVideoInfoResponse(videoName: String, position: Double, isPlaying: Bool) {
+    func sendVideoInfoResponse(videoName: String, position: Double, isPlaying: Bool, playlistInfo: PlaylistInfo? = nil, isFullScreen: Bool? = nil) {
         guard role == .master, !connectedPeers.isEmpty else { return }
         
-        let message = VideoCommandMessage(command: .videoInfoResponse(videoName: videoName, position: position, isPlaying: isPlaying), timestamp: Date())
+        let message = VideoCommandMessage(command: .videoInfoResponse(videoName: videoName, position: position, isPlaying: isPlaying, playlistInfo: playlistInfo, isFullScreen: isFullScreen), timestamp: Date())
         guard let data = try? JSONEncoder().encode(message) else {
             print("❌ Failed to encode video info response")
             return
@@ -280,10 +287,10 @@ class MultipeerService: NSObject, ObservableObject {
     }
     
     /// Send current video state to a single peer (e.g. when that peer just connected).
-    func sendVideoInfoResponse(videoName: String, position: Double, isPlaying: Bool, toPeer peerID: MCPeerID) {
+    func sendVideoInfoResponse(videoName: String, position: Double, isPlaying: Bool, playlistInfo: PlaylistInfo? = nil, isFullScreen: Bool? = nil, toPeer peerID: MCPeerID) {
         guard role == .master else { return }
         
-        let message = VideoCommandMessage(command: .videoInfoResponse(videoName: videoName, position: position, isPlaying: isPlaying), timestamp: Date())
+        let message = VideoCommandMessage(command: .videoInfoResponse(videoName: videoName, position: position, isPlaying: isPlaying, playlistInfo: playlistInfo, isFullScreen: isFullScreen), timestamp: Date())
         guard let data = try? JSONEncoder().encode(message) else { return }
         
         var commandData = Data([0xFF])
@@ -358,10 +365,18 @@ extension MultipeerService: MCSessionDelegate {
                     }
                     
                     // Handle videoInfoResponse on slave side
-                    if case .videoInfoResponse(let videoName, let position, let isPlaying) = message.command {
+                    if case .videoInfoResponse(let videoName, let position, let isPlaying, let playlistInfo, let isFullScreen) = message.command {
                         if self.role == .slave {
                             print("✅ Received video info response: \(videoName) at \(position)s, isPlaying: \(isPlaying)")
-                            self.videoDelegate?.didReceiveVideoInfoResponse(videoName: videoName, position: position, isPlaying: isPlaying)
+                            self.videoDelegate?.didReceiveVideoInfoResponse(videoName: videoName, position: position, isPlaying: isPlaying, playlistInfo: playlistInfo, isFullScreen: isFullScreen)
+                        }
+                        return
+                    }
+                    
+                    // Handle setFullScreen on slave side
+                    if case .setFullScreen(let isFullScreen) = message.command {
+                        if self.role == .slave {
+                            self.videoDelegate?.didReceiveSetFullScreen(isFullScreen: isFullScreen)
                         }
                         return
                     }
@@ -371,9 +386,9 @@ extension MultipeerService: MCSessionDelegate {
                         self.addCommandLog("⚠️ Delegate is nil!")
                     } else {
                         // Handle loadVideo command separately
-                        if case .loadVideo(let videoName) = message.command {
+                        if case .loadVideo(let videoName, let playlistInfo, let isFullScreen) = message.command {
                             print("✅ Calling videoDelegate.didReceiveLoadVideoCommand")
-                            self.videoDelegate?.didReceiveLoadVideoCommand(videoName: videoName)
+                            self.videoDelegate?.didReceiveLoadVideoCommand(videoName: videoName, playlistInfo: playlistInfo, isFullScreen: isFullScreen)
                         } else {
                             print("✅ Calling videoDelegate.didReceiveVideoCommand")
                             self.videoDelegate?.didReceiveVideoCommand(message.command)
