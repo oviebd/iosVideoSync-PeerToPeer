@@ -74,6 +74,12 @@ final class FullScreenPlayerVC: UIViewController {
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        // Preserve playing state when entering full screen - don't change it
+        if viewModel.isPlaying {
+            player.play()
+        } else {
+            player.pause()
+        }
         AppDelegate.orientationLock = .landscape
         if #available(iOS 16.0, *) {
             setNeedsUpdateOfSupportedInterfaceOrientations()

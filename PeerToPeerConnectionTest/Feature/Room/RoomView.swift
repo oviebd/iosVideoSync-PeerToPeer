@@ -7,9 +7,14 @@ struct RoomView: View {
     @EnvironmentObject var service: MultipeerService
     @EnvironmentObject var videoStore: VideoStore
     @StateObject private var videoPlayer = VideoPlayerVM()
+    @StateObject private var playlistVm = PlayListVm()
     @State private var selectedTab: RoomTab = .video
     @State private var selectedVideo: VideoItem? = nil
+    @State private var activePlaylist: PlaylistModelData? = nil
+    @State private var playlistIndex: Int = 0
     @State private var showVideoSelectionSheet = false
+    @State private var showPlaylistQueue = false
+    @State private var shouldAutoPlayAfterAdvance = false
     @State private var showVideoLoadError = false
     @State private var videoLoadErrorMessage = ""
     @State private var videoDelegateWrapper: VideoSyncDelegateWrapper?
@@ -27,7 +32,11 @@ struct RoomView: View {
                     tabBar
                     
                     switch selectedTab {
-                    case .video:    VideoRoomView(videoPlayer: videoPlayer)
+                    case .video:    VideoRoomView(
+                        videoPlayer: videoPlayer,
+                        activePlaylistName: activePlaylist?.name,
+                        onShowPlaylistQueue: activePlaylist != nil ? { showPlaylistQueue = true } : nil
+                    )
                     case .devices:  DevicesTab()
                     }
                 }
@@ -116,6 +125,11 @@ struct RoomView: View {
                 service.sendLoadVideoCommand(videoName: videoName)
                 print("✅ Video ready, broadcasted: \(videoName)")
             }
+            // Auto-play when advancing playlist or when selecting a playlist
+            if newValue, shouldAutoPlayAfterAdvance {
+                videoPlayer.masterPlay()
+                shouldAutoPlayAfterAdvance = false
+            }
         }
         .onChange(of: service.connectedPeers.count) { oldValue, newValue in
             // When slave (re)connects to master, auto-request current video state for smooth sync
@@ -133,11 +147,44 @@ struct RoomView: View {
             service.onPeerConnected = nil
         }
         .sheet(isPresented: $showVideoSelectionSheet) {
-            VideoSelectionSheet(selectedVideo: $selectedVideo, videoStore: videoStore)
+            VideoSelectionSheet(
+                selectedVideo: $selectedVideo,
+                videoStore: videoStore,
+                playlists: playlistVm.playlists,
+                onSelectVideo: { video in
+                    selectedVideo = video
+                    activePlaylist = nil
+                    playlistIndex = 0
+                },
+                onSelectPlaylist: { playlist in
+                    let videos = resolveVideos(from: playlist)
+                    guard let first = videos.first else { return }
+                    activePlaylist = playlist
+                    playlistIndex = 0
+                    selectedVideo = first
+                }
+            )
+        }
+        .sheet(isPresented: $showPlaylistQueue) {
+            if let playlist = activePlaylist {
+                PlaylistQueueSheet(
+                    playlist: playlist,
+                    videos: resolveVideos(from: playlist),
+                    currentIndex: playlistIndex,
+                    onDismiss: { showPlaylistQueue = false }
+                )
+            }
         }
         .onChange(of: selectedVideo) { oldValue, newValue in
             if let video = newValue, service.role == .master {
                 loadVideoForMaster(video)
+            }
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(for: AVPlayerItem.didPlayToEndTimeNotification)
+        ) { notification in
+            if notification.object as? AVPlayerItem === videoPlayer.player.currentItem {
+                advancePlaylist()
             }
         }
         .alert("Video Load Error", isPresented: $showVideoLoadError) {
@@ -243,6 +290,36 @@ struct RoomView: View {
         }
     }
     
+    // MARK: - Playlist Helpers
+
+    private var currentPlaylistVideo: VideoItem? {
+        guard let playlist = activePlaylist else { return nil }
+        let videos = resolveVideos(from: playlist)
+        guard playlistIndex < videos.count else { return nil }
+        return videos[playlistIndex]
+    }
+
+    private func resolveVideos(from playlist: PlaylistModelData) -> [VideoItem] {
+        let videoById = Dictionary(uniqueKeysWithValues: videoStore.videos.map { ($0.id.uuidString, $0) })
+        return playlist.videoIds.compactMap { videoById[$0] }
+    }
+
+    private func advancePlaylist() {
+        guard let playlist = activePlaylist else { return }
+        let videos = resolveVideos(from: playlist)
+        let nextIndex = playlistIndex + 1
+        guard nextIndex < videos.count else {
+            activePlaylist = nil
+            playlistIndex = 0
+            return
+        }
+        playlistIndex = nextIndex
+        let nextVideo = videos[nextIndex]
+        selectedVideo = nextVideo
+        shouldAutoPlayAfterAdvance = true
+        loadVideoForMaster(nextVideo)
+    }
+
     // MARK: - Video Loading Helpers
 
     private func loadVideoForMaster(_ videoItem: VideoItem) {
@@ -441,33 +518,33 @@ class VideoSyncDelegateWrapper: VideoSyncDelegate {
 
 // MARK: - Video Selection Sheet
 
+private enum SelectionTab { case videos, playlists }
+
 struct VideoSelectionSheet: View {
     @Binding var selectedVideo: VideoItem?
     @ObservedObject var videoStore: VideoStore
+    let playlists: [PlaylistModelData]
+    var onSelectVideo: (VideoItem) -> Void
+    var onSelectPlaylist: (PlaylistModelData) -> Void
     @Environment(\.dismiss) var dismiss
-    
+    @State private var selectedTab: SelectionTab = .videos
+
     var body: some View {
         NavigationView {
-            List {
-                if videoStore.videos.isEmpty {
-                    Text("No videos available")
-                        .foregroundColor(AppTheme.textDim)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding()
-                } else {
-                    ForEach(videoStore.videos) { video in
-                        Button(action: {
-                            selectedVideo = video
-                            dismiss()
-                        }) {
-                            HStack {
-                                Image(systemName: "film")
-                                    .foregroundColor(AppTheme.accent)
-                                Text(video.name)
-                                    .foregroundColor(AppTheme.text)
-                                Spacer()
-                            }
-                        }
+            VStack(spacing: 0) {
+                Picker("", selection: $selectedTab) {
+                    Text("Videos").tag(SelectionTab.videos)
+                    Text("Playlists").tag(SelectionTab.playlists)
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+
+                List {
+                    if selectedTab == .videos {
+                        videosContent
+                    } else {
+                        playlistsContent
                     }
                 }
             }
@@ -477,6 +554,61 @@ struct VideoSelectionSheet: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Cancel") {
                         dismiss()
+                    }
+                }
+            }
+        }
+    }
+
+    private var videosContent: some View {
+        Group {
+            if videoStore.videos.isEmpty {
+                Text("No videos available")
+                    .foregroundColor(AppTheme.textDim)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding()
+            } else {
+                ForEach(videoStore.videos) { video in
+                    Button(action: {
+                        onSelectVideo(video)
+                        dismiss()
+                    }) {
+                        HStack {
+                            Image(systemName: "film")
+                                .foregroundColor(AppTheme.accent)
+                            Text(video.name)
+                                .foregroundColor(AppTheme.text)
+                            Spacer()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var playlistsContent: some View {
+        Group {
+            if playlists.isEmpty {
+                Text("No playlists yet")
+                    .foregroundColor(AppTheme.textDim)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding()
+            } else {
+                ForEach(playlists) { playlist in
+                    Button(action: {
+                        onSelectPlaylist(playlist)
+                        dismiss()
+                    }) {
+                        HStack {
+                            Image(systemName: "music.note.list")
+                                .foregroundColor(AppTheme.accent)
+                            Text(playlist.name)
+                                .foregroundColor(AppTheme.text)
+                            Spacer()
+                            Text("\(playlist.videoIds.count) videos")
+                                .font(.system(size: 12))
+                                .foregroundColor(AppTheme.textDim)
+                        }
                     }
                 }
             }

@@ -11,6 +11,8 @@ internal import SwiftUI
 struct VideoRoomView: View {
     @EnvironmentObject var service: MultipeerService
     @ObservedObject var videoPlayer: VideoPlayerVM
+    var activePlaylistName: String? = nil
+    var onShowPlaylistQueue: (() -> Void)? = nil
     @State private var showLog: Bool = false
 
     var body: some View {
@@ -67,18 +69,38 @@ struct VideoRoomView: View {
 
     private var statusBar: some View {
         HStack(spacing: 12) {
-            Button(action: { service.leaveRoom() }) {
-                HStack(spacing: 6) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 12, weight: .semibold))
-                    Text("Leave")
-                        .font(.system(size: 13, weight: .medium))
+            if let name = activePlaylistName, let onShow = onShowPlaylistQueue {
+                Button(action: onShow) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "music.note.list")
+                            .font(.system(size: 12))
+                        Text(name)
+                            .font(.system(size: 13, weight: .medium))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 10, weight: .bold))
+                    }
+                    .foregroundColor(AppTheme.accent)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(AppTheme.accentDim)
+                    .cornerRadius(8)
                 }
-                .foregroundColor(AppTheme.text)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(AppTheme.surface)
-                .cornerRadius(8)
+            } else {
+                Button(action: { service.leaveRoom() }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text("Leave")
+                            .font(.system(size: 13, weight: .medium))
+                    }
+                    .foregroundColor(AppTheme.text)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(AppTheme.surface)
+                    .cornerRadius(8)
+                }
             }
 
             Spacer()
