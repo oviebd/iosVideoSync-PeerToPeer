@@ -46,6 +46,7 @@ enum AppText {
         static let selectVideo = "Select Video"
         static let video = "Video"
         static let devices = "Devices"
+        static let waitingForMaster = "Waiting for master to reconnect…"
     }
 
     // MARK: - Browse

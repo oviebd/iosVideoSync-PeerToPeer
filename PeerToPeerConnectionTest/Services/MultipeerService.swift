@@ -101,6 +101,8 @@ class MultipeerService: NSObject, ObservableObject {
     private var session: MCSession!
     private var advertiser: MCNearbyServiceAdvertiser?
     private var browser: MCNearbyServiceBrowser?
+    /// When slave loses connection, store master's display name for auto-reconnect
+    private var lastConnectedMasterDisplayName: String?
     
     var myDisplayName: String { myPeerID.displayName }
     
@@ -130,6 +132,14 @@ class MultipeerService: NSObject, ObservableObject {
         advertiser?.startAdvertisingPeer()
     }
     
+    /// Call when app returns to foreground. Restarts advertiser so slave can reconnect.
+    func resumeAdvertisingIfNeeded() {
+        guard role == .master, isInRoom, advertiser != nil else { return }
+        advertiser?.stopAdvertisingPeer()
+        advertiser?.startAdvertisingPeer()
+        addCommandLog("🔄 Master: resumed advertising")
+    }
+    
     // MARK: - Slave: Browse
     func startBrowsing() {
         role = .slave
@@ -148,6 +158,17 @@ class MultipeerService: NSObject, ObservableObject {
         browser?.invitePeer(peer, to: session, withContext: nil, timeout: 10)
     }
     
+    /// Ensures browser is running when slave is waiting for master to reconnect.
+    private func startReconnectBrowsing() {
+        guard role == .slave else { return }
+        if browser == nil {
+            browser = MCNearbyServiceBrowser(peer: myPeerID, serviceType: Self.serviceType)
+            browser?.delegate = self
+        }
+        browser?.startBrowsingForPeers()
+        addCommandLog("🔄 Reconnect: browsing for master…")
+    }
+    
     // MARK: - Leave Room / Stop
     func leaveRoom() {
         advertiser?.stopAdvertisingPeer()
@@ -160,6 +181,7 @@ class MultipeerService: NSObject, ObservableObject {
             self.browsingPeers = []
             self.isInRoom = false
             self.statusMessage = ""
+            self.lastConnectedMasterDisplayName = nil
         }
     }
     
@@ -327,8 +349,13 @@ extension MultipeerService: MCSessionDelegate {
             case .notConnected:
                 self.connectedPeers.removeAll { $0.id == peerID }
                 self.statusMessage = "\(peerID.displayName) disconnected"
+                // Slave stays in room and waits when master disconnects (e.g. background/lock)
                 if self.role == .slave && self.connectedPeers.isEmpty {
-                    self.isInRoom = false
+                    self.statusMessage = AppText.Room.waitingForMaster
+                    self.lastConnectedMasterDisplayName = peerID.displayName
+                    self.resetSession()
+                    self.startReconnectBrowsing()
+                    // Keep isInRoom = true so slave waits instead of leaving
                 }
                 
             case .connecting:
@@ -433,8 +460,15 @@ extension MultipeerService: MCNearbyServiceAdvertiserDelegate {
 extension MultipeerService: MCNearbyServiceBrowserDelegate {
     func browser(_ browser: MCNearbyServiceBrowser, foundPeer peerID: MCPeerID, withDiscoveryInfo info: [String : String]?) {
         DispatchQueue.main.async {
-            if !self.browsingPeers.contains(peerID) {
+            if !self.browsingPeers.contains(where: { $0.displayName == peerID.displayName }) {
                 self.browsingPeers.append(peerID)
+            }
+            // Auto-reconnect: slave waiting for master, found our previous master
+            if self.role == .slave, self.isInRoom, self.connectedPeers.isEmpty,
+               let lastMaster = self.lastConnectedMasterDisplayName, peerID.displayName == lastMaster {
+                self.addCommandLog("🔄 Reconnect: found master \(peerID.displayName), inviting…")
+                self.lastConnectedMasterDisplayName = nil
+                self.joinPeer(peerID)
             }
         }
     }

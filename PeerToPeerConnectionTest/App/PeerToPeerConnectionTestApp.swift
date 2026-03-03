@@ -11,11 +11,17 @@ internal import SwiftUI
 struct PeerToPeerConnectionTestApp: App {
     @StateObject private var appState = AppState()
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(appState.service)
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .active {
+                appState.service.resumeAdvertisingIfNeeded()
+            }
         }
     }
 }

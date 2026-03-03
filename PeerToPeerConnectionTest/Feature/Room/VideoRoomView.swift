@@ -48,13 +48,31 @@ struct VideoRoomView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
 
-            VideoPlayerView(
-                viewModel: videoPlayer,
-                role: service.role == .master ? .master : .slave
-            )
-            .aspectRatio(16/9, contentMode: .fit)
-            .frame(maxWidth: .infinity)
-            .background(Color.black)
+            ZStack(alignment: .center) {
+                VideoPlayerView(
+                    viewModel: videoPlayer,
+                    role: service.role == .master ? .master : .slave
+                )
+                .aspectRatio(16/9, contentMode: .fit)
+                .frame(maxWidth: .infinity)
+                .background(Color.black)
+
+                // Slave waiting overlay when master disconnected (e.g. background/lock)
+                if service.role == .slave && service.connectedPeers.isEmpty {
+                    Color.black.opacity(0.7)
+                        .aspectRatio(16/9, contentMode: .fit)
+                        .frame(maxWidth: .infinity)
+                    VStack(spacing: AppSpacing.md) {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: AppColors.accent))
+                            .scaleEffect(1.2)
+                        Text(AppText.Room.waitingForMaster)
+                            .font(.app.bodyMedium)
+                            .foregroundColor(.white)
+                            .multilineTextAlignment(.center)
+                    }
+                }
+            }
 
             statusBar
 

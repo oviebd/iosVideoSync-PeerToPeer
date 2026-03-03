@@ -230,9 +230,13 @@ struct RoomView: View {
                         Circle()
                             .fill(service.connectedPeers.isEmpty ? AppColors.textSecondary : AppColors.accent)
                             .frame(width: 6, height: 6)
-                        Text("\(service.connectedPeers.count) connected")
+                        Text(service.role == .slave && service.connectedPeers.isEmpty && service.isInRoom
+                             ? AppText.Room.waitingForMaster
+                             : "\(service.connectedPeers.count) connected")
                             .font(.app.label)
                             .foregroundColor(AppColors.textSecondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
                     }
                 }
                 Text(AppText.Room.roomActive)
@@ -715,10 +719,10 @@ struct DevicesTab: View {
     private var emptyState: some View {
         VStack(spacing: AppSpacing.lg) {
             Spacer(minLength: 60)
-            Image(systemName: "wifi.slash")
+            Image(systemName: service.role == .slave && service.isInRoom ? "clock.arrow.circlepath" : "wifi.slash")
                 .font(.system(size: 36, weight: .thin))
                 .foregroundColor(AppColors.textSecondary)
-            Text(service.role == .master ? "Waiting for devices to join…" : "Not connected to any master")
+            Text(service.role == .master ? "Waiting for devices to join…" : (service.isInRoom ? AppText.Room.waitingForMaster : "Not connected to any master"))
                 .font(.app.body)
                 .foregroundColor(AppColors.textSecondary)
         }
