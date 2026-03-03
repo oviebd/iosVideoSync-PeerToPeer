@@ -9,11 +9,13 @@ internal import SwiftUI
 
 @main
 struct PeerToPeerConnectionTestApp: App {
+    @StateObject private var appState = AppState()
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+
     var body: some Scene {
         WindowGroup {
             ContentView()
-          //  MainTabView()
+                .environmentObject(appState.service)
         }
     }
 }

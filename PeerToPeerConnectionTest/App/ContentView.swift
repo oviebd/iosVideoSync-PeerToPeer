@@ -8,9 +8,9 @@
 internal import SwiftUI
 
 struct ContentView: View {
-    @StateObject private var service = MultipeerService()
+    @EnvironmentObject var service: MultipeerService
     @StateObject private var videoStore = VideoStore()
-    
+
     var body: some View {
         Group {
             if service.isInRoom {
@@ -39,4 +39,5 @@ struct ContentView: View {
 
 #Preview {
     ContentView()
+        .environmentObject(MultipeerService())
 }
