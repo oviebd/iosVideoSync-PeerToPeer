@@ -39,15 +39,15 @@ struct VideoListItemView: View {
 
             if !isSelectionMode {
                 Button(action: onEdit) {
-                    Image(systemName: "pencil")
+                    Image(systemName: "square.and.pencil")
                         .foregroundColor(AppColors.textSecondary)
                         .padding(AppSpacing.sm)
                 }
                 .buttonStyle(.plain)
             }
         }
-        .padding(.vertical, AppSpacing.md)
-        .padding(.horizontal, AppSpacing.lg)
+        .padding(.vertical, AppSpacing.sm)
+        .padding(.horizontal, AppSpacing.md)
         .appCardStyle(isSelected: isSelected && isSelectionMode)
         .contentShape(Rectangle())
         .onTapGesture {

@@ -19,16 +19,21 @@ struct PlayListView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: AppSpacing.sm) {
                     Button(action: onCreate) {
-                        Image(systemName: "plus")
-                            .font(.app.title)
-                            .foregroundColor(AppColors.accent)
-                            .frame(width: 44, height: 44)
-                            .background(AppColors.surface)
-                            .cornerRadius(AppRadius.lg)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: AppRadius.lg)
-                                    .stroke(AppColors.border, lineWidth: 1)
-                            )
+                        HStack(spacing: AppSpacing.sm) {
+                            Image(systemName: "plus")
+                                .font(.app.bodyMedium)
+                            Text(AppText.PlaylistCreate.addPlaylist)
+                                .font(.app.bodyMedium)
+                        }
+                        .foregroundColor(AppColors.accent)
+                        .padding(.horizontal, AppSpacing.lg)
+                        .padding(.vertical, AppSpacing.md)
+                        .background(AppColors.surface)
+                        .cornerRadius(AppRadius.lg)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: AppRadius.lg)
+                                .stroke(AppColors.border, lineWidth: 1)
+                        )
                     }
                     .buttonStyle(.plain)
 

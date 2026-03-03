@@ -24,7 +24,7 @@ class VideoStore: ObservableObject {
         }
     }
     
-    func addVideo(name: String, bookmarkURL: Data) {
+    func addVideo(name: String, bookmarkURL: Data, onAdded: ((String) -> Void)? = nil) {
         let newId = UUID().uuidString
         let coreDataModel = VideoCoreDataModel(id: newId, name: name, bookmarkData: bookmarkURL)
         
@@ -37,6 +37,7 @@ class VideoStore: ObservableObject {
             }, receiveValue: { [weak self] success in
                 if success {
                     self?.loadVideos()
+                    onAdded?(newId)
                 }
             })
             .store(in: &cancellables)
@@ -44,8 +45,15 @@ class VideoStore: ObservableObject {
     
     func deleteVideo(at offsets: IndexSet) {
         let videosToDelete = offsets.map { videos[$0] }
-        
+        deleteVideos(videosToDelete, removeFromAppDocuments: true)
+    }
+
+    /// Deletes videos from DB and optionally removes files from app Documents (for Photos-imported videos).
+    func deleteVideos(_ videosToDelete: [VideoItem], removeFromAppDocuments: Bool) {
         for video in videosToDelete {
+            if removeFromAppDocuments {
+                deleteFileFromAppDocumentsIfNeeded(bookmarkData: video.bookmarkURL)
+            }
             dataManager?.deleteVideo(videoId: video.id.uuidString)
                 .receive(on: DispatchQueue.main)
                 .sink(receiveCompletion: { completion in
@@ -59,6 +67,20 @@ class VideoStore: ObservableObject {
                 })
                 .store(in: &cancellables)
         }
+    }
+
+    /// Deletes the file from app Documents if the bookmark points to a file inside app Documents (Photos-imported videos).
+    private func deleteFileFromAppDocumentsIfNeeded(bookmarkData: Data) {
+        guard let url = resolveBookmark(bookmarkData) else { return }
+        defer { url.stopAccessingSecurityScopedResource() }
+
+        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let docPath = documentsURL.resolvingSymlinksInPath().path
+        let filePath = url.resolvingSymlinksInPath().path
+
+        guard filePath.hasPrefix(docPath) else { return }
+
+        try? FileManager.default.removeItem(at: url)
     }
     
     func updateVideoName(id: UUID, newName: String) {

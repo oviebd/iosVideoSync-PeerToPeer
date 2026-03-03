@@ -98,6 +98,18 @@ enum AppText {
         static let folderName = "Folder Name"
         static let editName = "Edit Name"
         static let videoName = "Video name"
+        static let deleteFromPlaylist = "Delete Options"
+        static let deleteFromPlaylistMessage = "Do you want to delete the file or remove from playlist?"
+        static let deleteFile = "Delete File"
+        static let removeFromPlaylist = "Remove from Playlist"
+    }
+
+    enum Import {
+        static let importButton = "Import"
+    }
+
+    enum PlaylistCreate {
+        static let addPlaylist = "Add Playlist"
     }
 
     // MARK: - Placeholders

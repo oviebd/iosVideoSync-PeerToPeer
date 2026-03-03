@@ -18,7 +18,7 @@ struct VideoPicker: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> PHPickerViewController {
         var configuration = PHPickerConfiguration()
         configuration.filter = .videos
-        configuration.selectionLimit = 1
+        configuration.selectionLimit = 0  // 0 = unlimited
         
         let picker = PHPickerViewController(configuration: configuration)
         picker.delegate = context.coordinator
@@ -41,42 +41,45 @@ struct VideoPicker: UIViewControllerRepresentable {
         func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
             parent.isPresented = false
             
-            guard let result = results.first else { return }
+            guard !results.isEmpty else { return }
             
-            if result.itemProvider.hasItemConformingToTypeIdentifier(UTType.movie.identifier) {
+            let videoResults = results.filter { $0.itemProvider.hasItemConformingToTypeIdentifier(UTType.movie.identifier) }
+            
+            for result in videoResults {
                 result.itemProvider.loadFileRepresentation(forTypeIdentifier: UTType.movie.identifier) { url, error in
                     guard let url = url, error == nil else {
                         print("Failed to load file: \(error?.localizedDescription ?? "Unknown error")")
                         return
                     }
-                    
                     self.processVideo(url: url)
                 }
             }
         }
         
         private func processVideo(url: URL) {
-            // Copy to app's documents directory to create a bookmarkable URL
             let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            let destinationURL = documentsPath.appendingPathComponent(url.lastPathComponent)
+            var destinationURL = documentsPath.appendingPathComponent(url.lastPathComponent)
+            
+            // Ensure unique filename to avoid overwriting
+            var counter = 1
+            let baseName = url.deletingPathExtension().lastPathComponent
+            let ext = url.pathExtension
+            while FileManager.default.fileExists(atPath: destinationURL.path) {
+                let uniqueName = "\(baseName) (\(counter)).\(ext)"
+                destinationURL = documentsPath.appendingPathComponent(uniqueName)
+                counter += 1
+            }
             
             do {
-                // Remove existing file if present
-                if FileManager.default.fileExists(atPath: destinationURL.path) {
-                    try FileManager.default.removeItem(at: destinationURL)
-                }
-                
-                // Copy file
                 try FileManager.default.copyItem(at: url, to: destinationURL)
                 
-                // Create security-scoped bookmark
                 let bookmarkData = try destinationURL.bookmarkData(
                     options: .minimalBookmark,
                     includingResourceValuesForKeys: nil,
                     relativeTo: nil
                 )
                 
-                let fileName = url.lastPathComponent
+                let fileName = destinationURL.lastPathComponent
                 
                 DispatchQueue.main.async {
                     self.parent.onVideoPicked(fileName, bookmarkData)
@@ -97,7 +100,7 @@ struct DocumentPicker: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
         let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.movie, .mpeg4Movie, .quickTimeMovie, .avi], asCopy: false)
         picker.delegate = context.coordinator
-        picker.allowsMultipleSelection = false
+        picker.allowsMultipleSelection = true
         return picker
     }
     
@@ -115,43 +118,33 @@ struct DocumentPicker: UIViewControllerRepresentable {
         }
         
         func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-            guard let url = urls.first else {
-                parent.isPresented = false
-                return
-            }
+            parent.isPresented = false
             
-            // Start accessing security-scoped resource
-            guard url.startAccessingSecurityScopedResource() else {
-                print("Failed to access security-scoped resource")
-                parent.isPresented = false
-                return
-            }
+            guard !urls.isEmpty else { return }
             
-            defer {
+            for url in urls {
+                guard url.startAccessingSecurityScopedResource() else {
+                    print("Failed to access security-scoped resource for: \(url.lastPathComponent)")
+                    continue
+                }
+                
+                do {
+                    let bookmarkData = try url.bookmarkData(
+                        options: .minimalBookmark,
+                        includingResourceValuesForKeys: nil,
+                        relativeTo: nil
+                    )
+                    
+                    let fileName = url.lastPathComponent
+                    
+                    DispatchQueue.main.async {
+                        self.parent.onVideoPicked(fileName, bookmarkData)
+                    }
+                } catch {
+                    print("Failed to create bookmark: \(error)")
+                }
+                
                 url.stopAccessingSecurityScopedResource()
-            }
-            
-            // Create security-scoped bookmark for the selected file
-            // Note: .withSecurityScope and .securityScopeAllowOnlyReadAccess are macOS-only
-            // For iOS, we use .minimalBookmark which works with startAccessingSecurityScopedResource()
-            do {
-                let bookmarkData = try url.bookmarkData(
-                    options: .minimalBookmark,
-                    includingResourceValuesForKeys: nil,
-                    relativeTo: nil
-                )
-                
-                let fileName = url.lastPathComponent
-                
-                DispatchQueue.main.async {
-                    self.parent.onVideoPicked(fileName, bookmarkData)
-                    self.parent.isPresented = false
-                }
-            } catch {
-                print("Failed to create bookmark: \(error)")
-                DispatchQueue.main.async {
-                    self.parent.isPresented = false
-                }
             }
         }
         

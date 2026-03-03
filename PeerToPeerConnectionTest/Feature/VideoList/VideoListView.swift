@@ -22,6 +22,7 @@ struct VideoListView: View {
     @State private var selectedVideoIds: Set<String> = []
     @State private var showMoveToPlaylistOptions = false
     @State private var showDeleteConfirmation = false
+    @State private var showDeleteFromPlaylistOptions = false
 
     @State private var selectedPlaylistId: String? = nil
 
@@ -64,7 +65,7 @@ struct VideoListView: View {
                         Spacer()
                     } else {
                         ScrollView {
-                            LazyVStack(spacing: 1) {
+                            LazyVStack(spacing: AppSpacing.md) {
                                 if !filteredVideos.isEmpty {
                                     HStack {
                                         Text(selectedPlaylistId == nil
@@ -105,6 +106,7 @@ struct VideoListView: View {
                             }
                         }
                         .scrollContentBackground(.hidden)
+                        .padding(.horizontal, AppSpacing.lg)
                     }
                 }
             }
@@ -114,7 +116,8 @@ struct VideoListView: View {
                 if !isSelectionMode {
                     ToolbarItem(placement: .navigationBarTrailing) {
                         Button(action: { showPickerOptions = true }) {
-                            Image(systemName: "plus")
+                            Text(AppText.Import.importButton)
+                                .font(.app.bodyMedium)
                                 .foregroundColor(AppColors.accent)
                         }
                     }
@@ -135,19 +138,31 @@ struct VideoListView: View {
                 Button(AppText.General.cancel, role: .cancel) { }
             }
             .alert(AppText.Alert.deleteVideos, isPresented: $showDeleteConfirmation) {
-                Button(AppText.General.delete, role: .destructive) { deleteSelectedVideos() }
+                Button(AppText.General.delete, role: .destructive) { deleteSelectedVideos(removeFromAppDocuments: true) }
                 Button(AppText.General.cancel, role: .cancel) { }
             } message: {
                 Text(AppText.Alert.deleteVideosMessage)
             }
+            .confirmationDialog(AppText.Alert.deleteFromPlaylist, isPresented: $showDeleteFromPlaylistOptions, titleVisibility: .visible) {
+                Button(AppText.Alert.deleteFile, role: .destructive) {
+                    removeSelectedVideosFromPlaylist(exitSelectionMode: false)
+                    deleteSelectedVideos(removeFromAppDocuments: true)
+                }
+                Button(AppText.Alert.removeFromPlaylist) {
+                    removeSelectedVideosFromPlaylist(exitSelectionMode: true)
+                }
+                Button(AppText.General.cancel, role: .cancel) { }
+            } message: {
+                Text(AppText.Alert.deleteFromPlaylistMessage)
+            }
             .sheet(isPresented: $showVideoPicker) {
                 VideoPicker(isPresented: $showVideoPicker) { name, bookmarkData in
-                    videoStore.addVideo(name: name, bookmarkURL: bookmarkData)
+                    addVideoAndOptionallyToPlaylist(name: name, bookmarkURL: bookmarkData)
                 }
             }
             .sheet(isPresented: $showDocumentPicker) {
                 DocumentPicker(isPresented: $showDocumentPicker) { name, bookmarkData in
-                    videoStore.addVideo(name: name, bookmarkURL: bookmarkData)
+                    addVideoAndOptionallyToPlaylist(name: name, bookmarkURL: bookmarkData)
                 }
             }
             .sheet(item: $videoToEdit) { video in
@@ -201,7 +216,13 @@ struct VideoListView: View {
                 .disabled(selectedVideoIds.isEmpty)
 
                 Button {
-                    if !selectedVideoIds.isEmpty { showDeleteConfirmation = true }
+                    if !selectedVideoIds.isEmpty {
+                        if selectedPlaylistId != nil {
+                            showDeleteFromPlaylistOptions = true
+                        } else {
+                            showDeleteConfirmation = true
+                        }
+                    }
                 } label: {
                     Image(systemName: "trash")
                         .foregroundColor(selectedVideoIds.isEmpty ? AppColors.textSecondary : AppColors.danger)
@@ -246,14 +267,27 @@ struct VideoListView: View {
         }
     }
 
-    private func deleteSelectedVideos() {
+    private func deleteSelectedVideos(removeFromAppDocuments: Bool = true) {
         let ids = Array(selectedVideoIds)
-        let offsets = IndexSet(
-            videoStore.videos.enumerated()
-                .filter { ids.contains($0.element.id.uuidString) }
-                .map { $0.offset }
-        )
-        videoStore.deleteVideo(at: offsets)
+        let videosToDelete = videoStore.videos.filter { ids.contains($0.id.uuidString) }
+        videoStore.deleteVideos(videosToDelete, removeFromAppDocuments: removeFromAppDocuments)
         exitSelectionMode()
+    }
+
+    private func removeSelectedVideosFromPlaylist(exitSelectionMode: Bool = true) {
+        guard let playlistId = selectedPlaylistId else { return }
+        for videoId in selectedVideoIds {
+            playlistVm.deleteVideoFromPlaylist(playlistId: playlistId, videoId: videoId)
+        }
+        if exitSelectionMode { self.exitSelectionMode() }
+    }
+
+    private func addVideoAndOptionallyToPlaylist(name: String, bookmarkURL: Data) {
+        let playlistId = selectedPlaylistId
+        videoStore.addVideo(name: name, bookmarkURL: bookmarkURL) { videoId in
+            if let playlistId {
+                playlistVm.addVideosToPlaylist(playlistId: playlistId, videoIds: [videoId])
+            }
+        }
     }
 }
