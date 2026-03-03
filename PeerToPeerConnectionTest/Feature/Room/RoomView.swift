@@ -8,8 +8,8 @@ struct RoomView: View {
     @EnvironmentObject var videoStore: VideoStore
     @StateObject private var videoPlayer = VideoPlayerVM()
     @StateObject private var playlistVm = PlayListVm()
-    @State private var selectedTab: RoomTab = .video
     @State private var selectedVideo: VideoItem? = nil
+    @State private var showDevicesSheet = false
     @State private var activePlaylist: PlaylistModelData? = nil
     @State private var playlistIndex: Int = 0
     @State private var showVideoSelectionSheet = false
@@ -20,8 +20,6 @@ struct RoomView: View {
     @State private var videoDelegateWrapper: VideoSyncDelegateWrapper?
     @State private var slavePlaylistInfo: PlaylistInfo? = nil
     
-    enum RoomTab { case video, devices }
-    
     var body: some View {
         NavigationStack {
             ZStack {
@@ -30,16 +28,11 @@ struct RoomView: View {
                 
                 VStack(spacing: 0) {
                     roomHeader
-                    tabBar
-                    
-                    switch selectedTab {
-                    case .video:    VideoRoomView(
+                    VideoRoomView(
                         videoPlayer: videoPlayer,
                         currentPlaylistInfo: currentPlaylistInfo,
                         onShowPlaylistQueue: currentPlaylistInfo != nil ? { showPlaylistQueue = true } : nil
                     )
-                    case .devices:  DevicesTab()
-                    }
                 }
             }
             .environmentObject(service)
@@ -184,6 +177,18 @@ struct RoomView: View {
                 }
             )
         }
+        .sheet(isPresented: $showDevicesSheet) {
+            NavigationStack {
+                DevicesTab()
+                    .navigationTitle(AppText.Room.devices)
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarTrailing) {
+                            Button(AppText.General.done) { showDevicesSheet = false }
+                        }
+                    }
+            }
+        }
         .sheet(isPresented: $showPlaylistQueue) {
             if service.role == .master, let playlist = activePlaylist {
                 PlaylistQueueSheet(
@@ -226,18 +231,26 @@ struct RoomView: View {
                 HStack(spacing: AppSpacing.sm) {
                     StatusBadge(service.role == .master ? AppText.Room.master : AppText.Room.slave, isAccent: service.role == .master)
 
-                    HStack(spacing: AppSpacing.xs) {
-                        Circle()
-                            .fill(service.connectedPeers.isEmpty ? AppColors.textSecondary : AppColors.accent)
-                            .frame(width: 6, height: 6)
-                        Text(service.role == .slave && service.connectedPeers.isEmpty && service.isInRoom
-                             ? AppText.Room.waitingForMaster
-                             : "\(service.connectedPeers.count) connected")
-                            .font(.app.label)
-                            .foregroundColor(AppColors.textSecondary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
+                    Button(action: { showDevicesSheet = true }) {
+                        HStack(spacing: AppSpacing.xs) {
+                            Circle()
+                                .fill(service.connectedPeers.isEmpty ? AppColors.textSecondary : AppColors.accent)
+                                .frame(width: 6, height: 6)
+                            Text(service.role == .slave && service.connectedPeers.isEmpty && service.isInRoom
+                                 ? AppText.Room.waitingForMaster
+                                 : "\(service.connectedPeers.count) connected")
+                                .font(.app.label)
+                                .foregroundColor(AppColors.textSecondary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                        .padding(.horizontal, AppSpacing.sm)
+                        .padding(.vertical, AppSpacing.xs)
+                        .background(AppColors.surface)
+                        .overlay(RoundedRectangle(cornerRadius: AppRadius.md).stroke(AppColors.border))
+                        .cornerRadius(AppRadius.md)
                     }
+                    .buttonStyle(.plain)
                 }
                 Text(AppText.Room.roomActive)
                     .font(.app.titleLarge)
@@ -263,50 +276,8 @@ struct RoomView: View {
             .buttonStyle(.plain)
         }
         .padding(.horizontal, AppSpacing.xxl)
-        .padding(.top, AppLayout.safeAreaTopContent)
+        .padding(.top, AppSpacing.md)
         .padding(.bottom, AppSpacing.lg)
-    }
-    
-    // MARK: Tab Bar
-    private var tabBar: some View {
-        HStack(spacing: 0) {
-            ForEach([RoomTab.video, RoomTab.devices], id: \.self) { tab in
-                Button(action: { withAnimation(.easeInOut(duration: 0.2)) { selectedTab = tab } }) {
-                    VStack(spacing: AppSpacing.sm) {
-                        HStack(spacing: AppSpacing.sm) {
-                            Image(systemName: iconForTab(tab))
-                                .font(.system(size: 13))
-                            Text(labelForTab(tab))
-                                .font(.app.bodySemibold)
-                        }
-                        .foregroundColor(selectedTab == tab ? AppColors.accent : AppColors.textSecondary)
-
-                        Rectangle()
-                            .fill(selectedTab == tab ? AppColors.accent : Color.clear)
-                            .frame(height: 2)
-                    }
-                }
-                .buttonStyle(.plain)
-                .frame(maxWidth: .infinity)
-            }
-        }
-        .padding(.horizontal, AppSpacing.xxl)
-        .background(AppColors.background)
-        .overlay(Divider().background(AppColors.border), alignment: .bottom)
-    }
-    
-    private func iconForTab(_ tab: RoomTab) -> String {
-        switch tab {
-        case .video: return "play.rectangle.fill"
-        case .devices: return "network"
-        }
-    }
-    
-    private func labelForTab(_ tab: RoomTab) -> String {
-        switch tab {
-        case .video: return AppText.Room.video
-        case .devices: return AppText.Room.devices
-        }
     }
     
     // MARK: - Playlist Helpers

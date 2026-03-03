@@ -13,10 +13,13 @@ struct VideoRoomView: View {
     @ObservedObject var videoPlayer: VideoPlayerVM
     var currentPlaylistInfo: PlaylistInfo? = nil
     var onShowPlaylistQueue: (() -> Void)? = nil
-    @State private var showLog: Bool = false
+    // MARK: - Show Log (commented out; uncomment to re-enable)
+    // @State private var showLog: Bool = false
 
     var body: some View {
         VStack(spacing: 0) {
+            // MARK: - Show Log button (commented out; uncomment to re-enable)
+            /*
             HStack {
                 Spacer()
                 Button(action: {
@@ -47,6 +50,7 @@ struct VideoRoomView: View {
                     .frame(height: 180)
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
+            */
 
             ZStack(alignment: .center) {
                 VideoPlayerView(
