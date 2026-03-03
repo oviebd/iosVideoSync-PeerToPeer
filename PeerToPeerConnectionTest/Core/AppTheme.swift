@@ -2,20 +2,20 @@
 //  AppTheme.swift
 //  PeerToPeerConnectionTest
 //
-//  Created by Habibur_Periscope on 27/2/26.
+//  Legacy alias — delegates to AppColors. Prefer AppColors in new code.
 //
 
 import Foundation
 internal import SwiftUI
 
 struct AppTheme {
-    static let bg        = Color(hex: "#0A0C10")
-    static let surface   = Color(hex: "#141720")
-    static let border    = Color(hex: "#252A35")
-    static let accent    = Color(hex: "#4FFFB0")       // electric mint
-    static let accentDim = Color(hex: "#1A5C3E")
-    static let text      = Color(hex: "#E8EAF0")
-    static let textDim   = Color(hex: "#5A6070")
-    static let danger    = Color(hex: "#FF4D6A")
-    static let warning   = Color(hex: "#FFB547")
+    static let bg = AppColors.background
+    static let surface = AppColors.surface
+    static let border = AppColors.border
+    static let accent = AppColors.accent
+    static let accentDim = AppColors.accentDim
+    static let text = AppColors.text
+    static let textDim = AppColors.textSecondary
+    static let danger = AppColors.danger
+    static let warning = AppColors.warning
 }

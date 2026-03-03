@@ -2,11 +2,11 @@
 //  VideoRoomView.swift
 //  PeerToPeerConnectionTest
 //
+//  Redesigned with Core design system.
+//
 
 internal import AVFoundation
 internal import SwiftUI
-
-// MARK: - VideoRoomView
 
 struct VideoRoomView: View {
     @EnvironmentObject var service: MultipeerService
@@ -17,31 +17,29 @@ struct VideoRoomView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Command Log toggle button
             HStack {
                 Spacer()
                 Button(action: {
-                    withAnimation(.spring()) {
-                        showLog.toggle()
-                    }
+                    withAnimation(.spring()) { showLog.toggle() }
                 }) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: AppSpacing.sm) {
                         Image(systemName: showLog ? "terminal.fill" : "terminal")
                         Text(showLog ? "Hide Log" : "Show Log")
-                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .font(.app.smallSemibold)
                     }
-                    .foregroundColor(showLog ? AppTheme.accent : AppTheme.textDim)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(AppTheme.surface)
-                    .cornerRadius(6)
+                    .foregroundColor(showLog ? AppColors.accent : AppColors.textSecondary)
+                    .padding(.horizontal, AppSpacing.md)
+                    .padding(.vertical, AppSpacing.sm)
+                    .background(AppColors.surface)
+                    .cornerRadius(AppRadius.sm)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(showLog ? AppTheme.accent.opacity(0.3) : AppTheme.border, lineWidth: 1)
+                        RoundedRectangle(cornerRadius: AppRadius.sm)
+                            .stroke(showLog ? AppColors.accent.opacity(0.3) : AppColors.border, lineWidth: 1)
                     )
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
+                .buttonStyle(.plain)
+                .padding(.horizontal, AppSpacing.md)
+                .padding(.vertical, AppSpacing.sm)
             }
 
             if showLog {
@@ -62,173 +60,169 @@ struct VideoRoomView: View {
 
             Spacer()
         }
-        .background(AppTheme.bg.ignoresSafeArea())
+        .background(AppColors.background.ignoresSafeArea())
     }
 
-    // MARK: - Status Bar
+    // MARK: Status Bar
 
     private var statusBar: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: AppSpacing.md) {
             if let info = currentPlaylistInfo, let onShow = onShowPlaylistQueue {
                 Button(action: onShow) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: AppSpacing.sm) {
                         Image(systemName: "music.note.list")
-                            .font(.system(size: 12))
+                            .font(.app.body)
                         Text(info.playlistName)
-                            .font(.system(size: 13, weight: .medium))
+                            .font(.app.bodyMedium)
                             .lineLimit(1)
                             .truncationMode(.tail)
                         Image(systemName: "chevron.down")
-                            .font(.system(size: 10, weight: .bold))
+                            .font(.app.label)
                     }
-                    .foregroundColor(AppTheme.accent)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(AppTheme.accentDim)
-                    .cornerRadius(8)
+                    .foregroundColor(AppColors.accent)
+                    .padding(.horizontal, AppSpacing.md)
+                    .padding(.vertical, AppSpacing.sm)
+                    .background(AppColors.accentDim)
+                    .cornerRadius(AppRadius.md)
                 }
+                .buttonStyle(.plain)
             } else {
                 Button(action: { service.leaveRoom() }) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: AppSpacing.sm) {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 12, weight: .semibold))
-                        Text("Leave")
-                            .font(.system(size: 13, weight: .medium))
+                            .font(.app.bodySemibold)
+                        Text(AppText.General.leave)
+                            .font(.app.bodyMedium)
                     }
-                    .foregroundColor(AppTheme.text)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(AppTheme.surface)
-                    .cornerRadius(8)
+                    .foregroundColor(AppColors.text)
+                    .padding(.horizontal, AppSpacing.md)
+                    .padding(.vertical, AppSpacing.sm)
+                    .background(AppColors.surface)
+                    .cornerRadius(AppRadius.md)
                 }
+                .buttonStyle(.plain)
             }
 
             Spacer()
 
             if service.role == .master && videoPlayer.isSeeking {
-                HStack(spacing: 4) {
+                HStack(spacing: AppSpacing.xs) {
                     ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: AppTheme.accent))
+                        .progressViewStyle(CircularProgressViewStyle(tint: AppColors.accent))
                         .scaleEffect(0.8)
                     Text("SEEKING")
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .font(.app.labelSmall)
                         .tracking(1)
                 }
-                .foregroundColor(AppTheme.accent)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(AppTheme.accentDim)
-                .cornerRadius(6)
+                .foregroundColor(AppColors.accent)
+                .padding(.horizontal, AppSpacing.sm)
+                .padding(.vertical, AppSpacing.xs)
+                .background(AppColors.accentDim)
+                .cornerRadius(AppRadius.sm)
             }
 
-            HStack(spacing: 4) {
+            HStack(spacing: AppSpacing.xs) {
                 Circle()
-                    .fill(videoPlayer.isReady ? AppTheme.accent : AppTheme.warning)
+                    .fill(videoPlayer.isReady ? AppColors.accent : AppColors.warning)
                     .frame(width: 5, height: 5)
                 Text(videoPlayer.isReady ? "READY" : "LOAD")
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .font(.app.labelSmall)
                     .tracking(1)
             }
-            .foregroundColor(AppTheme.text)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(AppTheme.surface)
-            .cornerRadius(6)
+            .foregroundColor(AppColors.text)
+            .padding(.horizontal, AppSpacing.sm)
+            .padding(.vertical, AppSpacing.xs)
+            .background(AppColors.surface)
+            .cornerRadius(AppRadius.sm)
 
-            HStack(spacing: 4) {
+            HStack(spacing: AppSpacing.xs) {
                 Circle()
-                    .fill(service.role == .master ? AppTheme.accent : AppTheme.warning)
+                    .fill(service.role == .master ? AppColors.accent : AppColors.warning)
                     .frame(width: 5, height: 5)
-                Text(service.role == .master ? "MASTER" : "SLAVE")
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                Text(service.role == .master ? AppText.Room.master : AppText.Room.slave)
+                    .font(.app.labelSmall)
                     .tracking(1)
             }
-            .foregroundColor(AppTheme.text)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(AppTheme.surface)
-            .cornerRadius(6)
+            .foregroundColor(AppColors.text)
+            .padding(.horizontal, AppSpacing.sm)
+            .padding(.vertical, AppSpacing.xs)
+            .background(AppColors.surface)
+            .cornerRadius(AppRadius.sm)
 
-            HStack(spacing: 4) {
+            HStack(spacing: AppSpacing.xs) {
                 Image(systemName: "person.2.fill")
-                    .font(.system(size: 9))
+                    .font(.app.labelSmall)
                 Text("\(service.connectedPeers.count)")
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .font(.app.smallSemibold)
             }
-            .foregroundColor(AppTheme.text)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(AppTheme.surface)
-            .cornerRadius(6)
+            .foregroundColor(AppColors.text)
+            .padding(.horizontal, AppSpacing.sm)
+            .padding(.vertical, AppSpacing.xs)
+            .background(AppColors.surface)
+            .cornerRadius(AppRadius.sm)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(AppTheme.bg)
-        .overlay(Rectangle().stroke(AppTheme.border, lineWidth: 1), alignment: .bottom)
+        .padding(.horizontal, AppSpacing.md)
+        .padding(.vertical, AppSpacing.sm)
+        .background(AppColors.background)
+        .overlay(Rectangle().stroke(AppColors.border, lineWidth: 1), alignment: .bottom)
     }
 
-    // MARK: - Command Log View
+    // MARK: Command Log
 
     private var commandLogView: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("COMMAND LOG")
-                    .font(.system(size: 11, weight: .bold, design: .monospaced))
-                    .foregroundColor(AppTheme.accent)
+                    .font(.app.smallSemibold)
+                    .foregroundColor(AppColors.accent)
                     .tracking(2)
                 Spacer()
                 Button(action: { service.commandLog.removeAll() }) {
                     Text("CLEAR")
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
-                        .foregroundColor(AppTheme.textDim)
+                        .font(.app.labelSmall)
+                        .foregroundColor(AppColors.textSecondary)
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(AppTheme.surface)
+            .padding(.horizontal, AppSpacing.md)
+            .padding(.vertical, AppSpacing.sm)
+            .background(AppColors.surface)
 
-            Divider().background(AppTheme.border)
+            Divider().background(AppColors.border)
 
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 4) {
+                    LazyVStack(alignment: .leading, spacing: AppSpacing.xs) {
                         if service.commandLog.isEmpty {
                             Text("Waiting for commands...")
-                                .font(.system(size: 11, design: .monospaced))
-                                .foregroundColor(AppTheme.textDim)
-                                .padding(8)
+                                .font(.app.label)
+                                .foregroundColor(AppColors.textSecondary)
+                                .padding(AppSpacing.sm)
                         } else {
                             ForEach(Array(service.commandLog.enumerated()), id: \.offset) { index, log in
                                 Text(log)
-                                    .font(.system(size: 10, design: .monospaced))
-                                    .foregroundColor(log.contains("❌") ? AppTheme.danger :
-                                                   log.contains("📤") ? AppTheme.accent :
-                                                   log.contains("📥") ? AppTheme.warning :
-                                                   AppTheme.text)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 2)
+                                    .font(.app.captionRegular)
+                                    .foregroundColor(log.contains("❌") ? AppColors.danger :
+                                                     log.contains("📤") ? AppColors.accent :
+                                                     log.contains("📥") ? AppColors.warning :
+                                                     AppColors.text)
+                                    .padding(.horizontal, AppSpacing.sm)
+                                    .padding(.vertical, AppSpacing.xs)
                                     .id(index)
                             }
                         }
                     }
-                    .padding(.vertical, 4)
+                    .padding(.vertical, AppSpacing.xs)
                 }
-
-                .onChange(of: service.commandLog.count) { oldValue, newValue in
+                .onChange(of: service.commandLog.count) { _, _ in
                     if let lastIndex = service.commandLog.indices.last {
-                        withAnimation {
-                            proxy.scrollTo(lastIndex, anchor: .bottom)
-                        }
+                        withAnimation { proxy.scrollTo(lastIndex, anchor: .bottom) }
                     }
                 }
             }
             .frame(maxHeight: .infinity)
-            .background(AppTheme.bg)
+            .background(AppColors.background)
         }
-        .background(AppTheme.bg)
-        .overlay(
-            Rectangle()
-                .stroke(AppTheme.border, lineWidth: 1)
-        )
+        .background(AppColors.background)
+        .overlay(Rectangle().stroke(AppColors.border, lineWidth: 1))
     }
 }

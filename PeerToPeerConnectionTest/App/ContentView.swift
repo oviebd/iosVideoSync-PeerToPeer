@@ -22,9 +22,9 @@ struct ContentView: View {
                     VideoListView()
                         .environmentObject(videoStore)
                         .tabItem {
-                            Label("Videos", systemImage: "film")
+                            Label(AppText.VideoList.videos, systemImage: "film")
                         }
-                    
+
                     HomeView()
                         .environmentObject(service)
                         .tabItem {

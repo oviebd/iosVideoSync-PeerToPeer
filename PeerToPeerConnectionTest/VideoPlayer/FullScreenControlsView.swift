@@ -86,7 +86,7 @@ struct FullScreenControlsView: View {
                 if role == .slave {
                     HStack(spacing: 4) {
                         Circle()
-                            .fill(viewModel.isRemoteSeeking ? AppTheme.warning : AppTheme.accent)
+                            .fill(viewModel.isRemoteSeeking ? AppColors.warning : AppColors.accent)
                             .frame(width: 6, height: 6)
                         Text(viewModel.isRemoteSeeking ? "Master seeking…" : "Synced with master")
                             .font(.system(size: 11, weight: .medium))

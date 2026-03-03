@@ -25,8 +25,8 @@ struct RoomView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                AppTheme.bg.ignoresSafeArea()
-                GridPattern().ignoresSafeArea().opacity(0.05)
+                AppColors.background.ignoresSafeArea()
+                GridPattern().ignoresSafeArea().opacity(AppLayout.gridPatternOpacity * 0.8)
                 
                 VStack(spacing: 0) {
                     roomHeader
@@ -47,12 +47,12 @@ struct RoomView: View {
                 if service.role == .master {
                     ToolbarItem(placement: .navigationBarTrailing) {
                         Button(action: { showVideoSelectionSheet = true }) {
-                            HStack(spacing: 4) {
+                            HStack(spacing: AppSpacing.xs) {
                                 Image(systemName: "film.stack")
-                                Text("Select Video")
-                                    .font(.system(size: 14, weight: .semibold))
+                                Text(AppText.Room.selectVideo)
+                                    .font(.app.bodySemibold)
                             }
-                            .foregroundColor(AppTheme.accent)
+                            .foregroundColor(AppColors.accent)
                         }
                     }
                 }
@@ -212,7 +212,7 @@ struct RoomView: View {
                 advancePlaylist()
             }
         }
-        .alert("Video Load Error", isPresented: $showVideoLoadError) {
+        .alert(AppText.Alert.videoLoadError, isPresented: $showVideoLoadError) {
             Button("OK", role: .cancel) { }
         } message: {
             Text(videoLoadErrorMessage)
@@ -221,57 +221,46 @@ struct RoomView: View {
     
     // MARK: Header
     private var roomHeader: some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    // Role badge
-                    Text(service.role == .master ? "MASTER" : "SLAVE")
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
-                        .tracking(2)
-                        .foregroundColor(service.role == .master ? AppTheme.bg : AppTheme.warning)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(service.role == .master ? AppTheme.accent : AppTheme.warning.opacity(0.15))
-                        .overlay(
-                            Capsule().stroke(service.role == .master ? Color.clear : AppTheme.warning.opacity(0.4))
-                        )
-                        .clipShape(Capsule())
-                    
-                    // Connected count
-                    HStack(spacing: 4) {
+        HStack(alignment: .center, spacing: AppSpacing.md) {
+            VStack(alignment: .leading, spacing: AppSpacing.xs) {
+                HStack(spacing: AppSpacing.sm) {
+                    StatusBadge(service.role == .master ? AppText.Room.master : AppText.Room.slave, isAccent: service.role == .master)
+
+                    HStack(spacing: AppSpacing.xs) {
                         Circle()
-                            .fill(service.connectedPeers.isEmpty ? AppTheme.textDim : AppTheme.accent)
+                            .fill(service.connectedPeers.isEmpty ? AppColors.textSecondary : AppColors.accent)
                             .frame(width: 6, height: 6)
                         Text("\(service.connectedPeers.count) connected")
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundColor(AppTheme.textDim)
+                            .font(.app.label)
+                            .foregroundColor(AppColors.textSecondary)
                     }
                 }
-                Text("Room Active")
-                    .font(.system(size: 22, weight: .bold))
-                    .foregroundColor(AppTheme.text)
+                Text(AppText.Room.roomActive)
+                    .font(.app.titleLarge)
+                    .foregroundColor(AppColors.text)
             }
-            
+
             Spacer()
-            
+
             Button(action: { service.leaveRoom() }) {
-                HStack(spacing: 6) {
+                HStack(spacing: AppSpacing.sm) {
                     Image(systemName: "xmark")
-                        .font(.system(size: 12, weight: .bold))
-                    Text("Leave")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.app.smallSemibold)
+                    Text(AppText.General.leave)
+                        .font(.app.bodySemibold)
                 }
-                .foregroundColor(AppTheme.danger)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(AppTheme.danger.opacity(0.12))
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(AppTheme.danger.opacity(0.3)))
-                .cornerRadius(8)
+                .foregroundColor(AppColors.danger)
+                .padding(.horizontal, AppSpacing.lg)
+                .padding(.vertical, AppSpacing.sm)
+                .background(AppColors.danger.opacity(0.12))
+                .overlay(RoundedRectangle(cornerRadius: AppRadius.md).stroke(AppColors.danger.opacity(0.3)))
+                .cornerRadius(AppRadius.md)
             }
+            .buttonStyle(.plain)
         }
-        .padding(.horizontal, 24)
-        .padding(.top, 60)
-        .padding(.bottom, 16)
+        .padding(.horizontal, AppSpacing.xxl)
+        .padding(.top, AppLayout.safeAreaTopContent)
+        .padding(.bottom, AppSpacing.lg)
     }
     
     // MARK: Tab Bar
@@ -279,26 +268,27 @@ struct RoomView: View {
         HStack(spacing: 0) {
             ForEach([RoomTab.video, RoomTab.devices], id: \.self) { tab in
                 Button(action: { withAnimation(.easeInOut(duration: 0.2)) { selectedTab = tab } }) {
-                    VStack(spacing: 8) {
-                        HStack(spacing: 6) {
+                    VStack(spacing: AppSpacing.sm) {
+                        HStack(spacing: AppSpacing.sm) {
                             Image(systemName: iconForTab(tab))
                                 .font(.system(size: 13))
                             Text(labelForTab(tab))
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(.app.bodySemibold)
                         }
-                        .foregroundColor(selectedTab == tab ? AppTheme.accent : AppTheme.textDim)
-                        
+                        .foregroundColor(selectedTab == tab ? AppColors.accent : AppColors.textSecondary)
+
                         Rectangle()
-                            .fill(selectedTab == tab ? AppTheme.accent : Color.clear)
+                            .fill(selectedTab == tab ? AppColors.accent : Color.clear)
                             .frame(height: 2)
                     }
                 }
+                .buttonStyle(.plain)
                 .frame(maxWidth: .infinity)
             }
         }
-        .padding(.horizontal, 24)
-        .background(AppTheme.bg)
-        .overlay(Divider().background(AppTheme.border), alignment: .bottom)
+        .padding(.horizontal, AppSpacing.xxl)
+        .background(AppColors.background)
+        .overlay(Divider().background(AppColors.border), alignment: .bottom)
     }
     
     private func iconForTab(_ tab: RoomTab) -> String {
@@ -310,8 +300,8 @@ struct RoomView: View {
     
     private func labelForTab(_ tab: RoomTab) -> String {
         switch tab {
-        case .video: return "Video"
-        case .devices: return "Devices"
+        case .video: return AppText.Room.video
+        case .devices: return AppText.Room.devices
         }
     }
     
@@ -587,12 +577,12 @@ struct VideoSelectionSheet: View {
         NavigationView {
             VStack(spacing: 0) {
                 Picker("", selection: $selectedTab) {
-                    Text("Videos").tag(SelectionTab.videos)
-                    Text("Playlists").tag(SelectionTab.playlists)
+                    Text(AppText.VideoList.videos).tag(SelectionTab.videos)
+                    Text(AppText.Playlist.playlists).tag(SelectionTab.playlists)
                 }
                 .pickerStyle(.segmented)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(.horizontal, AppSpacing.lg)
+                .padding(.vertical, AppSpacing.md)
 
                 List {
                     if selectedTab == .videos {
@@ -602,13 +592,11 @@ struct VideoSelectionSheet: View {
                     }
                 }
             }
-            .navigationTitle("Select Video")
+            .navigationTitle(AppText.Room.selectVideo)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
+                    Button(AppText.General.cancel) { dismiss() }
                 }
             }
         }
@@ -617,8 +605,8 @@ struct VideoSelectionSheet: View {
     private var videosContent: some View {
         Group {
             if videoStore.videos.isEmpty {
-                Text("No videos available")
-                    .foregroundColor(AppTheme.textDim)
+                Text(AppText.VideoList.noVideos)
+                    .foregroundColor(AppColors.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding()
             } else {
@@ -629,9 +617,9 @@ struct VideoSelectionSheet: View {
                     }) {
                         HStack {
                             Image(systemName: "film")
-                                .foregroundColor(AppTheme.accent)
+                                .foregroundColor(AppColors.accent)
                             Text(video.name)
-                                .foregroundColor(AppTheme.text)
+                                .foregroundColor(AppColors.text)
                             Spacer()
                         }
                     }
@@ -643,8 +631,8 @@ struct VideoSelectionSheet: View {
     private var playlistsContent: some View {
         Group {
             if playlists.isEmpty {
-                Text("No playlists yet")
-                    .foregroundColor(AppTheme.textDim)
+                Text(AppText.Playlist.noPlaylists)
+                    .foregroundColor(AppColors.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding()
             } else {
@@ -655,13 +643,13 @@ struct VideoSelectionSheet: View {
                     }) {
                         HStack {
                             Image(systemName: "music.note.list")
-                                .foregroundColor(AppTheme.accent)
+                                .foregroundColor(AppColors.accent)
                             Text(playlist.name)
-                                .foregroundColor(AppTheme.text)
+                                .foregroundColor(AppColors.text)
                             Spacer()
-                            Text("\(playlist.videoIds.count) videos")
-                                .font(.system(size: 12))
-                                .foregroundColor(AppTheme.textDim)
+                            Text(String(format: AppText.Playlist.videosCount, playlist.videoIds.count))
+                                .font(.app.body)
+                                .foregroundColor(AppColors.textSecondary)
                         }
                     }
                 }
@@ -678,101 +666,98 @@ struct DevicesTab: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
-                // Status card
                 statusCard
-                    .padding(.horizontal, 20)
-                    .padding(.top, 20)
-                
+                    .padding(.horizontal, AppSpacing.xl)
+                    .padding(.top, AppSpacing.xl)
+
                 if service.connectedPeers.isEmpty {
                     emptyState
                 } else {
-                    LazyVStack(spacing: 10) {
+                    LazyVStack(spacing: AppSpacing.sm) {
                         ForEach(service.connectedPeers) { peer in
                             DeviceRow(peer: peer)
                         }
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 16)
+                    .padding(.horizontal, AppSpacing.xl)
+                    .padding(.top, AppSpacing.lg)
                 }
             }
         }
     }
     
     private var statusCard: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: AppSpacing.lg) {
             ZStack {
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(AppTheme.accentDim)
+                    .fill(AppColors.accentDim)
                     .frame(width: 48, height: 48)
                 Image(systemName: service.role == .master ? "crown.fill" : "iphone")
-                    .foregroundColor(AppTheme.accent)
-                    .font(.system(size: 20))
+                    .foregroundColor(AppColors.accent)
+                    .font(.app.iconMedium)
             }
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: AppSpacing.xs) {
                 Text(service.myDisplayName)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(AppTheme.text)
+                    .font(.app.bodySemibold)
+                    .foregroundColor(AppColors.text)
                 Text(service.statusMessage.isEmpty ? (service.role == .master ? "Broadcasting room" : "Listening for messages") : service.statusMessage)
-                    .font(.system(size: 12))
-                    .foregroundColor(AppTheme.textDim)
+                    .font(.app.body)
+                    .foregroundColor(AppColors.textSecondary)
                     .lineLimit(1)
             }
             Spacer()
         }
-        .padding(14)
-        .background(AppTheme.surface)
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(AppTheme.accent.opacity(0.25)))
-        .cornerRadius(12)
+        .padding(AppSpacing.lg)
+        .background(AppColors.surface)
+        .overlay(RoundedRectangle(cornerRadius: AppRadius.lg).stroke(AppColors.accent.opacity(0.25)))
+        .cornerRadius(AppRadius.lg)
     }
-    
+
     private var emptyState: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: AppSpacing.lg) {
             Spacer(minLength: 60)
             Image(systemName: "wifi.slash")
                 .font(.system(size: 36, weight: .thin))
-                .foregroundColor(AppTheme.textDim)
+                .foregroundColor(AppColors.textSecondary)
             Text(service.role == .master ? "Waiting for devices to join…" : "Not connected to any master")
-                .font(.system(size: 14))
-                .foregroundColor(AppTheme.textDim)
+                .font(.app.body)
+                .foregroundColor(AppColors.textSecondary)
         }
     }
 }
 
 struct DeviceRow: View {
     let peer: ConnectedPeer
-    
+
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: AppSpacing.lg) {
             ZStack {
                 Circle()
-                    .fill(AppTheme.surface)
+                    .fill(AppColors.surface)
                     .frame(width: 44, height: 44)
-                    .overlay(Circle().stroke(AppTheme.border))
+                    .overlay(Circle().stroke(AppColors.border))
                 Image(systemName: "iphone")
-                    .font(.system(size: 18))
-                    .foregroundColor(AppTheme.warning)
+                    .font(.app.iconSmall)
+                    .foregroundColor(AppColors.warning)
             }
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: AppSpacing.xs) {
                 Text(peer.displayName)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(AppTheme.text)
-                HStack(spacing: 5) {
+                    .font(.app.bodySemibold)
+                    .foregroundColor(AppColors.text)
+                HStack(spacing: AppSpacing.xs) {
                     Circle()
-                        .fill(AppTheme.accent)
+                        .fill(AppColors.accent)
                         .frame(width: 6, height: 6)
-                    Text("Connected")
-                        .font(.system(size: 11))
-                        .foregroundColor(AppTheme.textDim)
+                    Text(AppText.Room.connected)
+                        .font(.app.small)
+                        .foregroundColor(AppColors.textSecondary)
                 }
             }
             Spacer()
             Image(systemName: "checkmark.circle.fill")
-                .foregroundColor(AppTheme.accent)
-                .font(.system(size: 18))
+                .foregroundColor(AppColors.accent)
+                .font(.app.iconSmall)
         }
-        .padding(14)
-        .background(AppTheme.surface)
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(AppTheme.border))
-        .cornerRadius(12)
+        .padding(AppSpacing.lg)
+        .appCardStyle(isSelected: false)
     }
 }

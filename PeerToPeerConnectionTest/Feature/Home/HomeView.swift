@@ -1,38 +1,38 @@
+//
+//  HomeView.swift
+//  PeerToPeerConnectionTest
+//
+//  Redesigned with Core design system: AppColors, AppFonts, AppSpacing, AppText, AppComponents.
+//
+
 internal import SwiftUI
 import MultipeerConnectivity
-
 
 struct HomeView: View {
     @EnvironmentObject var service: MultipeerService
     @State private var showBrowse = false
     @State private var pulsing = false
-    
+
     var body: some View {
         ZStack {
-            AppTheme.bg.ignoresSafeArea()
-            
-            // Grid background pattern
+            AppColors.background.ignoresSafeArea()
+
             GridPattern()
                 .ignoresSafeArea()
-                .opacity(0.06)
-            
+                .opacity(AppLayout.gridPatternOpacity)
+
             VStack(spacing: 0) {
-                // Header
                 header
-                    .padding(.top, 60)
-                    .padding(.horizontal, 28)
-                
+                    .padding(.top, AppLayout.safeAreaTopContent)
+                    .padding(.horizontal, AppSpacing.xxxl)
+
                 Spacer()
-                
-                // Radar / identity card
                 identityCard
-                
                 Spacer()
-                
-                // Action buttons
+
                 actions
-                    .padding(.horizontal, 28)
-                    .padding(.bottom, 50)
+                    .padding(.horizontal, AppSpacing.xxxl)
+                    .padding(.bottom, AppLayout.safeAreaBottomContent)
             }
         }
         .sheet(isPresented: $showBrowse) {
@@ -40,213 +40,160 @@ struct HomeView: View {
                 .environmentObject(service)
         }
     }
-    
+
     // MARK: Header
+
     private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: AppSpacing.sm) {
             HStack {
-                // Status dot
                 Circle()
-                    .fill(AppTheme.accent)
-                    .frame(width: 8, height: 8)
-                    .shadow(color: AppTheme.accent.opacity(0.8), radius: 4)
-                Text("P2P CONNECT")
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                    .foregroundColor(AppTheme.accent)
+                    .fill(AppColors.accent)
+                    .frame(width: AppSpacing.sm, height: AppSpacing.sm)
+                    .shadow(color: AppColors.accent.opacity(0.8), radius: AppSpacing.xs)
+
+                Text(AppText.Home.badgeP2P)
+                    .font(.app.smallSemibold)
+                    .foregroundColor(AppColors.accent)
                     .tracking(3)
+
                 Spacer()
-                Text("LOCAL WIFI")
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .foregroundColor(AppTheme.textDim)
+
+                Text(AppText.Home.badgeWifi)
+                    .font(.app.label)
+                    .foregroundColor(AppColors.textSecondary)
                     .tracking(2)
             }
-            
-            Text("Device\nNetwork")
-                .font(.system(size: 42, weight: .black))
-                .foregroundColor(AppTheme.text)
-                .lineSpacing(2)
+
+            Text(AppText.Home.title)
+                .font(.app.display)
+                .foregroundColor(AppColors.text)
+                .lineSpacing(AppSpacing.xs)
         }
     }
-    
+
     // MARK: Identity Card
+
     private var identityCard: some View {
-        VStack(spacing: 24) {
-            // Radar rings
+        VStack(spacing: AppSpacing.xxl) {
             ZStack {
-                ForEach(0..<3) { i in
+                ForEach(0..<3, id: \.self) { i in
                     Circle()
-                        .stroke(AppTheme.accent.opacity(0.08 - Double(i) * 0.02), lineWidth: 1)
+                        .stroke(AppColors.accent.opacity(0.08 - Double(i) * 0.02), lineWidth: 1)
                         .frame(width: CGFloat(120 + i * 52), height: CGFloat(120 + i * 52))
                         .scaleEffect(pulsing ? 1.05 : 1.0)
                         .animation(.easeInOut(duration: 2.5).repeatForever(autoreverses: true).delay(Double(i) * 0.3), value: pulsing)
                 }
-                
-                // Center node
+
                 ZStack {
                     Circle()
-                        .fill(AppTheme.surface)
+                        .fill(AppColors.surface)
                         .frame(width: 96, height: 96)
-                        .overlay(
-                            Circle()
-                                .stroke(AppTheme.border, lineWidth: 1)
-                        )
-                    
+                        .overlay(Circle().stroke(AppColors.border, lineWidth: 1))
+
                     Image(systemName: "antenna.radiowaves.left.and.right")
-                        .font(.system(size: 32, weight: .thin))
-                        .foregroundColor(AppTheme.accent)
+                        .font(.app.iconXLarge)
+                        .foregroundColor(AppColors.accent)
                 }
             }
             .frame(height: 240)
             .onAppear { pulsing = true }
-            
-            // Device name tag
-            VStack(spacing: 4) {
-                Text("THIS DEVICE")
-                    .font(.system(size: 9, weight: .medium, design: .monospaced))
-                    .foregroundColor(AppTheme.textDim)
+
+            VStack(spacing: AppSpacing.xs) {
+                Text(AppText.Home.thisDevice)
+                    .font(.app.labelSmall)
+                    .foregroundColor(AppColors.textSecondary)
                     .tracking(3)
                 Text(service.myDisplayName)
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundColor(AppTheme.text)
+                    .font(.app.title)
+                    .foregroundColor(AppColors.text)
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 14)
-            .background(AppTheme.surface)
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(AppTheme.border, lineWidth: 1))
-            .cornerRadius(8)
+            .padding(.horizontal, AppSpacing.xxl)
+            .padding(.vertical, AppSpacing.lg)
+            .background(AppColors.surface)
+            .overlay(RoundedRectangle(cornerRadius: AppRadius.md).stroke(AppColors.border, lineWidth: 1))
+            .cornerRadius(AppRadius.md)
         }
     }
-    
+
     // MARK: Actions
+
     private var actions: some View {
-        VStack(spacing: 12) {
-            // Create Room — Master
-            Button(action: { service.createRoom() }) {
-                HStack(spacing: 12) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(AppTheme.accentDim)
-                            .frame(width: 36, height: 36)
-                        Image(systemName: "plus.circle.fill")
-                            .foregroundColor(AppTheme.accent)
-                            .font(.system(size: 18))
-                    }
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Create Room")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(AppTheme.text)
-                        Text("Become the master device")
-                            .font(.system(size: 12))
-                            .foregroundColor(AppTheme.textDim)
-                    }
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .foregroundColor(AppTheme.textDim)
-                        .font(.system(size: 12, weight: .semibold))
-                }
-                .padding(16)
-                .background(AppTheme.surface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(AppTheme.accent.opacity(0.3), lineWidth: 1)
-                )
-                .cornerRadius(12)
+        VStack(spacing: AppSpacing.md) {
+            ActionCard(
+                icon: "plus.circle.fill",
+                title: AppText.Home.createRoom,
+                subtitle: AppText.Home.createRoomSubtitle,
+                accentBorder: true
+            ) {
+                service.createRoom()
             }
-            
-            // Join Room — Slave
-            Button(action: {
+
+            ActionCard(
+                icon: "arrow.right.circle.fill",
+                iconColor: AppColors.warning,
+                title: AppText.Home.joinRoom,
+                subtitle: AppText.Home.joinRoomSubtitle,
+                accentBorder: false
+            ) {
                 service.startBrowsing()
                 showBrowse = true
-            }) {
-                HStack(spacing: 12) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(Color(hex: "#1A2030"))
-                            .frame(width: 36, height: 36)
-                        Image(systemName: "arrow.right.circle.fill")
-                            .foregroundColor(AppTheme.warning)
-                            .font(.system(size: 18))
-                    }
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Join Room")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(AppTheme.text)
-                        Text("Connect to a master device")
-                            .font(.system(size: 12))
-                            .foregroundColor(AppTheme.textDim)
-                    }
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .foregroundColor(AppTheme.textDim)
-                        .font(.system(size: 12, weight: .semibold))
-                }
-                .padding(16)
-                .background(AppTheme.surface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(AppTheme.border, lineWidth: 1)
-                )
-                .cornerRadius(12)
             }
         }
     }
 }
 
-// MARK: - BrowseView (Slave scans for rooms)
+// MARK: - BrowseView
 
 struct BrowseView: View {
     @EnvironmentObject var service: MultipeerService
     @Environment(\.dismiss) var dismiss
-    @State private var scanning = true
-    
+
     var body: some View {
         ZStack {
-            AppTheme.bg.ignoresSafeArea()
-            
+            AppColors.background.ignoresSafeArea()
+
             VStack(spacing: 0) {
-                // Handle
                 Capsule()
-                    .fill(AppTheme.border)
+                    .fill(AppColors.border)
                     .frame(width: 36, height: 4)
-                    .padding(.top, 12)
-                
-                // Title
+                    .padding(.top, AppSpacing.md)
+
                 HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("SCAN")
-                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                            .foregroundColor(AppTheme.accent)
+                    VStack(alignment: .leading, spacing: AppSpacing.xs) {
+                        Text(AppText.Browse.scan)
+                            .font(.app.label)
+                            .foregroundColor(AppColors.accent)
                             .tracking(4)
-                        Text("Available Rooms")
-                            .font(.system(size: 22, weight: .bold))
-                            .foregroundColor(AppTheme.text)
+                        Text(AppText.Browse.availableRooms)
+                            .font(.app.titleLarge)
+                            .foregroundColor(AppColors.text)
                     }
                     Spacer()
                     Button(action: { dismiss() }) {
                         Image(systemName: "xmark")
-                            .foregroundColor(AppTheme.textDim)
-                            .padding(10)
-                            .background(AppTheme.surface)
+                            .foregroundColor(AppColors.textSecondary)
+                            .frame(width: AppLayout.minTapTarget, height: AppLayout.minTapTarget)
+                            .background(AppColors.surface)
                             .clipShape(Circle())
                     }
+                    .buttonStyle(.plain)
                 }
-                .padding(.horizontal, 24)
-                .padding(.top, 20)
-                .padding(.bottom, 24)
-                
-                // Peer List
+                .padding(.horizontal, AppSpacing.xxl)
+                .padding(.top, AppSpacing.xl)
+                .padding(.bottom, AppSpacing.xxl)
+
                 if service.browsingPeers.isEmpty {
-                    VStack(spacing: 16) {
+                    VStack(spacing: AppSpacing.lg) {
                         Spacer()
                         ScanningIndicator()
-                        Text("Searching for rooms…")
-                            .font(.system(size: 14, design: .monospaced))
-                            .foregroundColor(AppTheme.textDim)
+                        Text(AppText.Browse.searching)
+                            .font(.app.body)
+                            .foregroundColor(AppColors.textSecondary)
                         Spacer()
                     }
                 } else {
                     ScrollView {
-                        LazyVStack(spacing: 10) {
+                        LazyVStack(spacing: AppSpacing.sm) {
                             ForEach(service.browsingPeers, id: \.self) { peer in
                                 PeerRow(peer: peer) {
                                     service.joinPeer(peer)
@@ -254,7 +201,7 @@ struct BrowseView: View {
                                 }
                             }
                         }
-                        .padding(.horizontal, 24)
+                        .padding(.horizontal, AppSpacing.xxl)
                     }
                 }
             }
@@ -264,62 +211,66 @@ struct BrowseView: View {
     }
 }
 
+// MARK: - PeerRow
+
 struct PeerRow: View {
     let peer: MCPeerID
     let onJoin: () -> Void
-    
+
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: AppSpacing.lg) {
             ZStack {
                 Circle()
-                    .fill(AppTheme.surface)
+                    .fill(AppColors.surface)
                     .frame(width: 44, height: 44)
-                    .overlay(Circle().stroke(AppTheme.border))
+                    .overlay(Circle().stroke(AppColors.border))
                 Image(systemName: "iphone")
-                    .foregroundColor(AppTheme.warning)
-                    .font(.system(size: 18))
+                    .foregroundColor(AppColors.warning)
+                    .font(.app.iconSmall)
             }
-            VStack(alignment: .leading, spacing: 3) {
+
+            VStack(alignment: .leading, spacing: AppSpacing.xs) {
                 Text(peer.displayName)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(AppTheme.text)
-                Text("Master Device · Ready")
-                    .font(.system(size: 11))
-                    .foregroundColor(AppTheme.textDim)
+                    .font(.app.bodySemibold)
+                    .foregroundColor(AppColors.text)
+                Text(AppText.Browse.masterReady)
+                    .font(.app.small)
+                    .foregroundColor(AppColors.textSecondary)
             }
+
             Spacer()
+
             Button(action: onJoin) {
-                Text("JOIN")
-                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                Text(AppText.General.join)
+                    .font(.app.smallSemibold)
                     .tracking(2)
-                    .foregroundColor(AppTheme.bg)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(AppTheme.accent)
-                    .cornerRadius(6)
+                    .foregroundColor(AppColors.background)
+                    .padding(.horizontal, AppSpacing.lg)
+                    .padding(.vertical, AppSpacing.sm)
+                    .background(AppColors.accent)
+                    .cornerRadius(AppRadius.sm)
             }
+            .buttonStyle(.plain)
         }
-        .padding(14)
-        .background(AppTheme.surface)
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(AppTheme.border))
-        .cornerRadius(12)
+        .padding(AppSpacing.lg)
+        .appCardStyle(isSelected: false)
     }
 }
 
-// MARK: - Scanning Indicator
+// MARK: - ScanningIndicator
 
 struct ScanningIndicator: View {
     @State private var rotation: Double = 0
-    
+
     var body: some View {
         ZStack {
             Circle()
-                .stroke(AppTheme.border, lineWidth: 2)
+                .stroke(AppColors.border, lineWidth: 2)
                 .frame(width: 60, height: 60)
-            
+
             Circle()
                 .trim(from: 0, to: 0.25)
-                .stroke(AppTheme.accent, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                .stroke(AppColors.accent, style: StrokeStyle(lineWidth: 2, lineCap: .round))
                 .frame(width: 60, height: 60)
                 .rotationEffect(.degrees(rotation))
                 .animation(.linear(duration: 1).repeatForever(autoreverses: false), value: rotation)
@@ -328,12 +279,12 @@ struct ScanningIndicator: View {
     }
 }
 
-// MARK: - Grid Pattern
+// MARK: - GridPattern
 
 struct GridPattern: View {
     var body: some View {
         Canvas { context, size in
-            let spacing: CGFloat = 30
+            let spacing = AppLayout.gridSpacing
             var path = Path()
             var x: CGFloat = 0
             while x <= size.width {
@@ -349,19 +300,5 @@ struct GridPattern: View {
             }
             context.stroke(path, with: .color(.white), lineWidth: 0.5)
         }
-    }
-}
-
-// MARK: - Color Extension
-
-extension Color {
-    init(hex: String) {
-        let scanner = Scanner(string: hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted))
-        var hexNumber: UInt64 = 0
-        scanner.scanHexInt64(&hexNumber)
-        let r = Double((hexNumber & 0xff0000) >> 16) / 255
-        let g = Double((hexNumber & 0x00ff00) >> 8)  / 255
-        let b = Double(hexNumber & 0x0000ff)          / 255
-        self.init(red: r, green: g, blue: b)
     }
 }

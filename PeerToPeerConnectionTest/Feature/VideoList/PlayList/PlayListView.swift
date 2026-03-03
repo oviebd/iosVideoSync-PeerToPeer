@@ -2,7 +2,7 @@
 //  PlayListView.swift
 //  PeerToPeerConnectionTest
 //
-//  Created by Antigravity on 2026-02-28.
+//  Redesigned with Core design system.
 //
 
 internal import SwiftUI
@@ -13,56 +13,52 @@ struct PlayListView: View {
     let onSelect: (PlaylistModelData?) -> Void
     let onDelete: (PlaylistModelData) -> Void
     let onCreate: () -> Void
-    
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: AppSpacing.md) {
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    // Create Playlist Button
+                HStack(spacing: AppSpacing.sm) {
                     Button(action: onCreate) {
                         Image(systemName: "plus")
-                            .font(.system(size: 20, weight: .semibold))
-                            .foregroundColor(AppTheme.accent)
+                            .font(.app.title)
+                            .foregroundColor(AppColors.accent)
                             .frame(width: 44, height: 44)
-                            .background(AppTheme.surface)
-                            .cornerRadius(12)
+                            .background(AppColors.surface)
+                            .cornerRadius(AppRadius.lg)
                             .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(AppTheme.border, lineWidth: 1)
+                                RoundedRectangle(cornerRadius: AppRadius.lg)
+                                    .stroke(AppColors.border, lineWidth: 1)
                             )
                     }
-                    
-                    // "All" Playlist Item
+                    .buttonStyle(.plain)
+
                     Button(action: { onSelect(nil) }) {
                         Text("All")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(selectedPlaylistId == nil ? AppTheme.accent : AppTheme.text)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 12)
-                            .background(selectedPlaylistId == nil ? AppTheme.accentDim.opacity(0.2) : AppTheme.surface)
-                            .cornerRadius(12)
+                            .font(.app.bodyMedium)
+                            .foregroundColor(selectedPlaylistId == nil ? AppColors.accent : AppColors.text)
+                            .padding(.horizontal, AppSpacing.lg)
+                            .padding(.vertical, AppSpacing.md)
+                            .background(selectedPlaylistId == nil ? AppColors.accentDim.opacity(0.2) : AppColors.surface)
+                            .cornerRadius(AppRadius.lg)
                             .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(selectedPlaylistId == nil ? AppTheme.accent : AppTheme.border, lineWidth: 1)
+                                RoundedRectangle(cornerRadius: AppRadius.lg)
+                                    .stroke(selectedPlaylistId == nil ? AppColors.accent : AppColors.border, lineWidth: 1)
                             )
                     }
-                    
+                    .buttonStyle(.plain)
+
                     ForEach(playlists) { playlist in
                         PlayListItem(
                             playlist: playlist,
                             isSelected: selectedPlaylistId == playlist.id,
-                            onSelect: {
-                                onSelect(playlist)
-                            },
-                            onDelete: {
-                                onDelete(playlist)
-                            }
+                            onSelect: { onSelect(playlist) },
+                            onDelete: { onDelete(playlist) }
                         )
                     }
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, AppSpacing.lg)
             }
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, AppSpacing.sm)
     }
 }

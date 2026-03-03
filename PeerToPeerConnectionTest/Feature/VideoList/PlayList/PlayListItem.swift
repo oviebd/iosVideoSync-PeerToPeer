@@ -2,7 +2,7 @@
 //  PlayListItem.swift
 //  PeerToPeerConnectionTest
 //
-//  Created by Antigravity on 2026-02-28.
+//  Redesigned with Core design system.
 //
 
 internal import SwiftUI
@@ -12,44 +12,41 @@ struct PlayListItem: View {
     let isSelected: Bool
     let onSelect: () -> Void
     let onDelete: () -> Void
-    
+
     @State private var showDeleteAlert = false
-    
+
     var body: some View {
         Button(action: onSelect) {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: AppSpacing.xs) {
                 Text(playlist.name)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(isSelected ? AppTheme.accent : AppTheme.text)
+                    .font(.app.bodyMedium)
+                    .foregroundColor(isSelected ? AppColors.accent : AppColors.text)
                     .lineLimit(1)
-                
-                Text("\(playlist.videoIds.count) videos")
-                    .font(.system(size: 11))
-                    .foregroundColor(isSelected ? AppTheme.accent.opacity(0.7) : AppTheme.textDim)
+
+                Text(String(format: AppText.Playlist.videosCount, playlist.videoIds.count))
+                    .font(.app.small)
+                    .foregroundColor(isSelected ? AppColors.accent.opacity(0.7) : AppColors.textSecondary)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(isSelected ? AppTheme.accentDim.opacity(0.2) : AppTheme.surface)
-            .cornerRadius(12)
+            .padding(.horizontal, AppSpacing.lg)
+            .padding(.vertical, AppSpacing.md)
+            .background(isSelected ? AppColors.accentDim.opacity(0.2) : AppColors.surface)
+            .cornerRadius(AppRadius.lg)
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? AppTheme.accent : AppTheme.border, lineWidth: 1)
+                RoundedRectangle(cornerRadius: AppRadius.lg)
+                    .stroke(isSelected ? AppColors.accent : AppColors.border, lineWidth: 1)
             )
         }
+        .buttonStyle(.plain)
         .contextMenu {
-            Button(role: .destructive) {
-                showDeleteAlert = true
-            } label: {
-                Label("Delete", systemImage: "trash")
+            Button(role: .destructive) { showDeleteAlert = true } label: {
+                Label(AppText.General.delete, systemImage: "trash")
             }
         }
-        .alert("Delete Playlist", isPresented: $showDeleteAlert) {
-            Button("Delete", role: .destructive) {
-                onDelete()
-            }
-            Button("Cancel", role: .cancel) { }
+        .alert(AppText.Alert.deletePlaylist, isPresented: $showDeleteAlert) {
+            Button(AppText.General.delete, role: .destructive) { onDelete() }
+            Button(AppText.General.cancel, role: .cancel) { }
         } message: {
-            Text("Are you sure you want to delete '\(playlist.name)'? This action cannot be undone.")
+            Text(String(format: AppText.Alert.deletePlaylistMessage, playlist.name))
         }
     }
 }

@@ -2,7 +2,7 @@
 //  VideoListView.swift
 //  PeerToPeerConnectionTest
 //
-//  Created by Habibur_Periscope on 20/2/26.
+//  Redesigned with Core design system.
 //
 
 internal import SwiftUI
@@ -10,28 +10,26 @@ internal import SwiftUI
 struct VideoListView: View {
     @EnvironmentObject var videoStore: VideoStore
     @StateObject private var playlistVm = PlayListVm()
-    
+
     @State private var showVideoPicker = false
     @State private var showDocumentPicker = false
     @State private var showPickerOptions = false
     @State private var showCreatePlaylistAlert = false
     @State private var newPlaylistName = ""
     @State private var videoToEdit: VideoItem?
-    
-    // Selection Mode States
+
     @State private var isSelectionMode = false
     @State private var selectedVideoIds: Set<String> = []
     @State private var showMoveToPlaylistOptions = false
     @State private var showDeleteConfirmation = false
-    
-    // Playlist Filtering
+
     @State private var selectedPlaylistId: String? = nil
-    
+
     var body: some View {
         NavigationView {
             ZStack {
-                AppTheme.bg.ignoresSafeArea()
-                
+                AppColors.background.ignoresSafeArea()
+
                 VStack(spacing: 0) {
                     if isSelectionMode {
                         selectionToolbar
@@ -41,15 +39,11 @@ struct VideoListView: View {
                             playlists: playlistVm.playlists,
                             selectedPlaylistId: selectedPlaylistId,
                             onSelect: { playlist in
-                                withAnimation {
-                                    selectedPlaylistId = playlist?.id
-                                }
+                                withAnimation { selectedPlaylistId = playlist?.id }
                             },
                             onDelete: { playlist in
                                 playlistVm.deletePlaylist(id: playlist.id)
-                                if selectedPlaylistId == playlist.id {
-                                    selectedPlaylistId = nil
-                                }
+                                if selectedPlaylistId == playlist.id { selectedPlaylistId = nil }
                             },
                             onCreate: {
                                 newPlaylistName = ""
@@ -57,63 +51,56 @@ struct VideoListView: View {
                             }
                         )
                     }
-                    
+
                     let filteredVideos = getFilteredVideos()
-                    
+
                     if filteredVideos.isEmpty && playlistVm.playlists.isEmpty && selectedPlaylistId == nil {
                         Spacer()
-                        VStack(spacing: 16) {
-                            Image(systemName: "film")
-                                .font(.system(size: 48))
-                                .foregroundColor(AppTheme.textDim)
-                            Text("No videos or playlists yet")
-                                .font(.system(size: 16))
-                                .foregroundColor(AppTheme.textDim)
-                        }
+                        EmptyStateView(
+                            icon: "film",
+                            message: AppText.VideoList.noVideosOrPlaylists,
+                            iconFont: .system(size: 48)
+                        )
                         Spacer()
                     } else {
                         ScrollView {
                             LazyVStack(spacing: 1) {
                                 if !filteredVideos.isEmpty {
                                     HStack {
-                                        Text(selectedPlaylistId == nil ? "All Videos" : (playlistVm.playlists.first(where: { $0.id == selectedPlaylistId })?.name ?? "Videos"))
-                                            .font(.system(size: 14, weight: .semibold))
-                                            .foregroundColor(AppTheme.textDim)
+                                        Text(selectedPlaylistId == nil
+                                            ? AppText.VideoList.allVideos
+                                            : (playlistVm.playlists.first(where: { $0.id == selectedPlaylistId })?.name ?? AppText.VideoList.videos))
+                                            .font(.app.bodySemibold)
+                                            .foregroundColor(AppColors.textSecondary)
                                         Spacer()
                                     }
-                                    .padding(.horizontal, 16)
-                                    .padding(.top, 12)
-                                    .padding(.bottom, 8)
-                                    
+                                    .padding(.horizontal, AppSpacing.lg)
+                                    .padding(.top, AppSpacing.md)
+                                    .padding(.bottom, AppSpacing.sm)
+
                                     ForEach(filteredVideos) { video in
                                         VideoListItemView(
                                             video: video,
                                             isSelectionMode: isSelectionMode,
                                             isSelected: selectedVideoIds.contains(video.id.uuidString),
-                                            onEdit: {
-                                                videoToEdit = video
-                                            },
+                                            onEdit: { videoToEdit = video },
                                             onLongPress: {
                                                 withAnimation {
                                                     isSelectionMode = true
                                                     selectedVideoIds.insert(video.id.uuidString)
                                                 }
                                             },
-                                            onToggleSelection: {
-                                                toggleSelection(for: video.id.uuidString)
-                                            }
+                                            onToggleSelection: { toggleSelection(for: video.id.uuidString) }
                                         )
-                                        .background(AppTheme.surface)
+                                        .background(AppColors.surface)
                                     }
                                 } else {
-                                    VStack(spacing: 16) {
-                                        Spacer().frame(height: 100)
-                                        Image(systemName: "video.slash")
-                                            .font(.system(size: 40))
-                                            .foregroundColor(AppTheme.textDim)
-                                        Text("No videos in this playlist")
-                                            .foregroundColor(AppTheme.textDim)
-                                    }
+                                    EmptyStateView(
+                                        icon: "video.slash",
+                                        message: AppText.VideoList.noVideosInPlaylist,
+                                        iconFont: .system(size: 40)
+                                    )
+                                    .padding(.top, 100)
                                 }
                             }
                         }
@@ -121,45 +108,37 @@ struct VideoListView: View {
                     }
                 }
             }
-            .navigationTitle(isSelectionMode ? "\(selectedVideoIds.count) Selected" : "Videos")
+            .navigationTitle(isSelectionMode ? String(format: AppText.VideoList.selectedCount, selectedVideoIds.count) : AppText.VideoList.videos)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 if !isSelectionMode {
                     ToolbarItem(placement: .navigationBarTrailing) {
-                        Button(action: {
-                            showPickerOptions = true
-                        }) {
+                        Button(action: { showPickerOptions = true }) {
                             Image(systemName: "plus")
-                                .foregroundColor(AppTheme.accent)
+                                .foregroundColor(AppColors.accent)
                         }
                     }
                 }
             }
-            .confirmationDialog("Select Option", isPresented: $showPickerOptions, titleVisibility: .visible) {
-                Button("Photos Library") {
-                    showVideoPicker = true
-                }
-                Button("Files") {
-                    showDocumentPicker = true
-                }
-                Button("Cancel", role: .cancel) { }
+            .confirmationDialog(AppText.Alert.selectOption, isPresented: $showPickerOptions, titleVisibility: .visible) {
+                Button(AppText.Alert.photosLibrary) { showVideoPicker = true }
+                Button(AppText.Alert.files) { showDocumentPicker = true }
+                Button(AppText.General.cancel, role: .cancel) { }
             }
-            .confirmationDialog("Move to Playlist", isPresented: $showMoveToPlaylistOptions, titleVisibility: .visible) {
+            .confirmationDialog(AppText.Alert.moveToPlaylist, isPresented: $showMoveToPlaylistOptions, titleVisibility: .visible) {
                 ForEach(playlistVm.playlists) { playlist in
                     Button(playlist.name) {
                         playlistVm.addVideosToPlaylist(playlistId: playlist.id, videoIds: Array(selectedVideoIds))
                         exitSelectionMode()
                     }
                 }
-                Button("Cancel", role: .cancel) { }
+                Button(AppText.General.cancel, role: .cancel) { }
             }
-            .alert("Delete Videos", isPresented: $showDeleteConfirmation) {
-                Button("Delete", role: .destructive) {
-                    deleteSelectedVideos()
-                }
-                Button("Cancel", role: .cancel) { }
+            .alert(AppText.Alert.deleteVideos, isPresented: $showDeleteConfirmation) {
+                Button(AppText.General.delete, role: .destructive) { deleteSelectedVideos() }
+                Button(AppText.General.cancel, role: .cancel) { }
             } message: {
-                Text("Are you sure you want to delete the selected videos?")
+                Text(AppText.Alert.deleteVideosMessage)
             }
             .sheet(isPresented: $showVideoPicker) {
                 VideoPicker(isPresented: $showVideoPicker) { name, bookmarkData in
@@ -178,82 +157,72 @@ struct VideoListView: View {
                         videoStore.updateVideoName(id: video.id, newName: newName)
                         videoToEdit = nil
                     },
-                    onCancel: {
-                        videoToEdit = nil
-                    }
+                    onCancel: { videoToEdit = nil }
                 )
                 .presentationDetents([.medium])
             }
-            .alert("New Folder", isPresented: $showCreatePlaylistAlert) {
-                TextField("Folder Name", text: $newPlaylistName)
-                Button("Create") {
-                    playlistVm.createPlaylist(name: newPlaylistName)
-                }
-                Button("Cancel", role: .cancel) { }
+            .alert(AppText.Alert.newFolder, isPresented: $showCreatePlaylistAlert) {
+                TextField(AppText.Alert.folderName, text: $newPlaylistName)
+                Button(AppText.General.create) { playlistVm.createPlaylist(name: newPlaylistName) }
+                Button(AppText.General.cancel, role: .cancel) { }
             } message: {
-                Text("Enter a name for this folder.")
+                Text(AppText.Alert.newFolderMessage)
             }
         }
     }
-    
-    // MARK: - Selection Toolbar
-    
+
+    // MARK: Selection Toolbar
+
     private var selectionToolbar: some View {
         HStack {
-            Button("Cancel") {
-                exitSelectionMode()
-            }
-            .foregroundColor(AppTheme.accent)
-            
+            Button(AppText.General.cancel) { exitSelectionMode() }
+                .foregroundColor(AppColors.accent)
+
             Spacer()
-            
-            HStack(spacing: 24) {
-                Button(action: {
-                    let currentVideos = getFilteredVideos()
-                    if selectedVideoIds.count == currentVideos.count {
+
+            HStack(spacing: AppSpacing.xxl) {
+                Button {
+                    let current = getFilteredVideos()
+                    if selectedVideoIds.count == current.count {
                         selectedVideoIds.removeAll()
                     } else {
-                        selectedVideoIds = Set(currentVideos.map { $0.id.uuidString })
+                        selectedVideoIds = Set(current.map { $0.id.uuidString })
                     }
-                }) {
-                    Text(selectedVideoIds.count == getFilteredVideos().count ? "Deselect All" : "Select All")
-                        .font(.system(size: 14))
+                } label: {
+                    Text(selectedVideoIds.count == getFilteredVideos().count ? AppText.VideoList.deselectAll : AppText.VideoList.selectAll)
+                        .font(.app.body)
                 }
-                
-                Button(action: {
-                    if !selectedVideoIds.isEmpty {
-                        showMoveToPlaylistOptions = true
-                    }
-                }) {
+
+                Button {
+                    if !selectedVideoIds.isEmpty { showMoveToPlaylistOptions = true }
+                } label: {
                     Image(systemName: "folder.badge.plus")
                 }
                 .disabled(selectedVideoIds.isEmpty)
-                
-                Button(action: {
-                    if !selectedVideoIds.isEmpty {
-                        showDeleteConfirmation = true
-                    }
-                }) {
+
+                Button {
+                    if !selectedVideoIds.isEmpty { showDeleteConfirmation = true }
+                } label: {
                     Image(systemName: "trash")
-                        .foregroundColor(selectedVideoIds.isEmpty ? AppTheme.textDim : AppTheme.danger)
+                        .foregroundColor(selectedVideoIds.isEmpty ? AppColors.textSecondary : AppColors.danger)
                 }
                 .disabled(selectedVideoIds.isEmpty)
             }
-            .foregroundColor(AppTheme.accent)
+            .foregroundColor(AppColors.accent)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(AppTheme.surface)
+        .padding(.horizontal, AppSpacing.lg)
+        .padding(.vertical, AppSpacing.md)
+        .background(AppColors.surface)
         .overlay(
             Rectangle()
-                .fill(AppTheme.border)
+                .fill(AppColors.border)
                 .frame(height: 1),
             alignment: .bottom
         )
     }
-    
-    // MARK: - Helper Methods
-    
+
+    // MARK: Helpers
+
     private func getFilteredVideos() -> [VideoItem] {
         if let playlistId = selectedPlaylistId,
            let playlist = playlistVm.playlists.first(where: { $0.id == playlistId }) {
@@ -261,7 +230,7 @@ struct VideoListView: View {
         }
         return videoStore.videos
     }
-    
+
     private func toggleSelection(for id: String) {
         if selectedVideoIds.contains(id) {
             selectedVideoIds.remove(id)
@@ -269,24 +238,22 @@ struct VideoListView: View {
             selectedVideoIds.insert(id)
         }
     }
-    
+
     private func exitSelectionMode() {
         withAnimation {
             isSelectionMode = false
             selectedVideoIds.removeAll()
         }
     }
-    
+
     private func deleteSelectedVideos() {
-        let videoIdsToRemove = Array(selectedVideoIds)
-        // Find offsets for videoStore.deleteVideo(at:)
+        let ids = Array(selectedVideoIds)
         let offsets = IndexSet(
             videoStore.videos.enumerated()
-                .filter { videoIdsToRemove.contains($0.element.id.uuidString) }
+                .filter { ids.contains($0.element.id.uuidString) }
                 .map { $0.offset }
         )
         videoStore.deleteVideo(at: offsets)
         exitSelectionMode()
     }
 }
-
