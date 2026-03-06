@@ -122,10 +122,14 @@ class VideoPlayerVM: ObservableObject, VideoSyncDelegate {
         }
 
         player.publisher(for: \.rate)
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] rate in
                 guard let self = self else { return }
                 self.lastKnownRate = Float(rate)
-                self.isPlaying = rate > 0
+                // Defer @Published update to avoid "Publishing changes from within view updates"
+                DispatchQueue.main.async {
+                    self.isPlaying = rate > 0
+                }
                 self.broadcastPlayPauseIfFromNativeControls(rate: Double(rate))
             }
             .store(in: &cancellables)

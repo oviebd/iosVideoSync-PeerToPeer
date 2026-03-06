@@ -27,7 +27,7 @@ struct VideoListView: View {
     @State private var selectedPlaylistId: String? = nil
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ZStack {
                 AppColors.background.ignoresSafeArea()
 
