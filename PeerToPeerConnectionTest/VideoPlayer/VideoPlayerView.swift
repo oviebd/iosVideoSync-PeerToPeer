@@ -28,6 +28,7 @@ struct VideoPlayerView: View {
             VideoSurfaceView(player: viewModel.player)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.black)
+                .opacity(viewModel.hasReachedEnd ? 0 : 1)
 
             if visibilityManager.isVisible {
                 PlayerControlsOverlay(

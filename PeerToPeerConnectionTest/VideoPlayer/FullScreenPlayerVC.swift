@@ -3,6 +3,7 @@
 //  PeerToPeerConnectionTest
 //
 
+import Combine
 internal import AVFoundation
 internal import SwiftUI
 internal import UIKit
@@ -15,6 +16,7 @@ final class FullScreenPlayerVC: UIViewController {
     private let role: PlayerRole
     private var playerLayer: AVPlayerLayer?
     private var hostingVC: UIHostingController<FullScreenControlsView>?
+    private var hasReachedEndCancellable: AnyCancellable?
     var onDismiss: (() -> Void)?
 
     init(player: AVPlayer, viewModel: VideoPlayerVM, role: PlayerRole) {
@@ -37,6 +39,13 @@ final class FullScreenPlayerVC: UIViewController {
         layer.videoGravity = .resizeAspect
         view.layer.insertSublayer(layer, at: 0)
         playerLayer = layer
+
+        hasReachedEndCancellable = viewModel.$hasReachedEnd
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] hasReachedEnd in
+                self?.playerLayer?.isHidden = hasReachedEnd
+            }
+        playerLayer?.isHidden = viewModel.hasReachedEnd
 
         let visibilityManager = ControlsVisibilityManager()
         let controlsView = FullScreenControlsView(

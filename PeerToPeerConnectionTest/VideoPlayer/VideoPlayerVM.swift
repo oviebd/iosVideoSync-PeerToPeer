@@ -19,8 +19,10 @@ class VideoPlayerVM: ObservableObject, VideoSyncDelegate {
     @Published var isRemoteSeeking: Bool = false
     @Published var currentVideoName: String?
     @Published var isFullScreen: Bool = false
+    @Published var hasReachedEnd: Bool = false
 
     private var timeObserver: Any?
+    private var endTimeObserver: NSObjectProtocol?
     private var cancellables = Set<AnyCancellable>()
     private var statusObserver: NSKeyValueObservation?
     private var seekCompletionTimer: Timer?
@@ -52,6 +54,13 @@ class VideoPlayerVM: ObservableObject, VideoSyncDelegate {
 
     func loadVideo(url: URL, videoName: String? = nil) {
         player.pause()
+        hasReachedEnd = false
+
+        // Remove previous end-time observer
+        if let observer = endTimeObserver {
+            NotificationCenter.default.removeObserver(observer)
+            endTimeObserver = nil
+        }
 
         // Reset seek detection state so the position jump (old video end → new video 0)
         // is not mistaken for a user seek, which would send pause after 1 second
@@ -71,6 +80,14 @@ class VideoPlayerVM: ObservableObject, VideoSyncDelegate {
 
         let playerItem = AVPlayerItem(url: url)
         player.replaceCurrentItem(with: playerItem)
+
+        endTimeObserver = NotificationCenter.default.addObserver(
+            forName: AVPlayerItem.didPlayToEndTimeNotification,
+            object: playerItem,
+            queue: .main
+        ) { [weak self] _ in
+            self?.hasReachedEnd = true
+        }
 
         currentVideoName = videoName
         isReady = false
@@ -113,6 +130,11 @@ class VideoPlayerVM: ObservableObject, VideoSyncDelegate {
 
             if let duration = self.player.currentItem?.duration.seconds, duration.isFinite {
                 self.duration = duration
+            }
+
+            // Reset hasReachedEnd when user seeks back from the end
+            if self.hasReachedEnd, newPosition < self.duration - 0.1 {
+                self.hasReachedEnd = false
             }
 
             // Detect seek from native controls (position jump > expected from playback)
@@ -185,6 +207,9 @@ class VideoPlayerVM: ObservableObject, VideoSyncDelegate {
             url.stopAccessingSecurityScopedResource()
         }
 
+        if let observer = endTimeObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
         if let observer = timeObserver {
             player.removeTimeObserver(observer)
         }
