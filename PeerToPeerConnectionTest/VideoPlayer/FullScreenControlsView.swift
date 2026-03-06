@@ -3,7 +3,39 @@
 //  PeerToPeerConnectionTest
 //
 
+import Combine
 internal import SwiftUI
+
+// MARK: - ClosePressHandler
+
+private final class ClosePressHandler: ObservableObject {
+    private let subject = PassthroughSubject<Void, Never>()
+    private var cancellables = Set<AnyCancellable>()
+    private var count = 0
+
+    static let requiredPresses = 5
+    static let debounceInterval: TimeInterval = 2
+
+    init() {
+        subject
+            .debounce(for: .seconds(Self.debounceInterval), scheduler: RunLoop.main)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] in
+                self?.count = 0
+            }
+            .store(in: &cancellables)
+    }
+
+    func press(onDismiss: @escaping () -> Void) {
+        count += 1
+        subject.send(())
+
+        if count >= Self.requiredPresses {
+            onDismiss()
+            count = 0
+        }
+    }
+}
 
 // MARK: - FullScreenControlsView
 
@@ -12,6 +44,8 @@ struct FullScreenControlsView: View {
     let role: PlayerRole
     @ObservedObject var visibilityManager: ControlsVisibilityManager
     var onDismiss: () -> Void
+
+    @StateObject private var closePressHandler = ClosePressHandler()
 
     var body: some View {
         Group {
@@ -167,9 +201,9 @@ struct FullScreenControlsView: View {
                 .foregroundColor(.white)
                 .frame(width: 50, alignment: .trailing)
 
-            // Close (Dismiss) Button — master only; slave exits when master sends setFullScreen(false)
+            // Close (Dismiss) Button — master only; requires 5 presses within 2 seconds (debounce resets count)
             if role == .master {
-                Button(action: onDismiss) {
+                Button(action: { closePressHandler.press(onDismiss: onDismiss) }) {
                     Image(systemName: "multiply")
                         .font(.system(size: 20, weight: .bold))
                         .foregroundColor(.white)

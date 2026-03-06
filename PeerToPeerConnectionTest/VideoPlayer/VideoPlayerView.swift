@@ -22,8 +22,6 @@ struct VideoPlayerView: View {
     let role: PlayerRole
 
     @StateObject private var visibilityManager = ControlsVisibilityManager()
-    @State private var showEnterFullScreenAlert = false
-    @State private var showExitFullScreenAlert = false
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -35,7 +33,7 @@ struct VideoPlayerView: View {
                 PlayerControlsOverlay(
                     viewModel: viewModel,
                     role: role,
-                    onEnterFullScreen: { showEnterFullScreenAlert = true }
+                    onEnterFullScreen: { enterFullScreen() }
                 )
                 .transition(.opacity)
                 .contentShape(Rectangle())
@@ -70,19 +68,11 @@ struct VideoPlayerView: View {
                     player: viewModel.player,
                     viewModel: viewModel,
                     role: role,
-                    onDismiss: { showExitFullScreenAlert = true }
+                    onDismiss: { fullScreenDismiss() }
                 )
                 .ignoresSafeArea()
             }
             .presentationBackground(Color.black)
-        }
-        .alert("Want to go full screen?", isPresented: $showEnterFullScreenAlert) {
-            Button("Yes") { enterFullScreen() }
-            Button("Cancel", role: .cancel) { }
-        }
-        .alert("Want to quit full screen?", isPresented: $showExitFullScreenAlert) {
-            Button("Yes") { fullScreenDismiss() }
-            Button("Cancel", role: .cancel) { }
         }
     }
 
