@@ -62,7 +62,7 @@ final class FullScreenPlayerVC: UIViewController {
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        playerLayer?.frame = view.layer.bounds
+        playerLayer?.frame = view.bounds
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -70,18 +70,25 @@ final class FullScreenPlayerVC: UIViewController {
         // Force layout update after rotation completes for consistent full-screen display on all devices
         view.setNeedsLayout()
         view.layoutIfNeeded()
-        playerLayer?.frame = view.layer.bounds
+        playerLayer?.frame = view.bounds
     }
 
     override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
         super.viewWillTransition(to: size, with: coordinator)
-        coordinator.animate(alongsideTransition: nil) { [weak self] _ in
+        let updateLayout = { [weak self] in
             guard let self else { return }
             self.view.setNeedsLayout()
             self.view.layoutIfNeeded()
-            self.playerLayer?.frame = self.view.layer.bounds
+            self.playerLayer?.frame = self.view.bounds
             self.hostingVC?.view.setNeedsLayout()
             self.hostingVC?.view.layoutIfNeeded()
+        }
+        coordinator.animate(alongsideTransition: { _ in updateLayout() }) { _ in
+            updateLayout()
+            // Extra layout pass for iPad to ensure full-screen fill after rotation completes
+            if UIDevice.current.userInterfaceIdiom == .pad {
+                DispatchQueue.main.async { updateLayout() }
+            }
         }
     }
 
@@ -93,6 +100,8 @@ final class FullScreenPlayerVC: UIViewController {
         } else {
             player.pause()
         }
+        // Only lock orientation to landscape on iPhone; iPad keeps current rotation
+        guard UIDevice.current.userInterfaceIdiom == .phone else { return }
         AppDelegate.orientationLock = .landscape
         if #available(iOS 16.0, *) {
             setNeedsUpdateOfSupportedInterfaceOrientations()
@@ -110,6 +119,8 @@ final class FullScreenPlayerVC: UIViewController {
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
+        // Only restore portrait lock on iPhone; iPad keeps current rotation
+        guard UIDevice.current.userInterfaceIdiom == .phone else { return }
         AppDelegate.orientationLock = .portrait
         if #available(iOS 16.0, *) {
             setNeedsUpdateOfSupportedInterfaceOrientations()
@@ -125,7 +136,9 @@ final class FullScreenPlayerVC: UIViewController {
         }
     }
 
-    override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .landscape }
+    override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
+        UIDevice.current.userInterfaceIdiom == .pad ? .all : .landscape
+    }
     override var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation { .landscapeLeft }
     override var shouldAutorotate: Bool { true }
 }
