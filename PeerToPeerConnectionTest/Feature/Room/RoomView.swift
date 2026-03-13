@@ -581,7 +581,7 @@ struct VideoSelectionSheet: View {
         Group {
             if videoStore.videos.isEmpty {
                 Text(AppText.VideoList.noVideos)
-                    .foregroundColor(AppColors.textSecondary)
+                    .foregroundStyle(Color.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding()
             } else {
@@ -592,9 +592,9 @@ struct VideoSelectionSheet: View {
                     }) {
                         HStack {
                             Image(systemName: "film")
-                                .foregroundColor(AppColors.accent)
+                                .foregroundStyle(Color.accentColor)
                             Text(video.name)
-                                .foregroundColor(AppColors.text)
+                                .foregroundStyle(Color.primary)
                             Spacer()
                         }
                     }
@@ -607,7 +607,7 @@ struct VideoSelectionSheet: View {
         Group {
             if playlists.isEmpty {
                 Text(AppText.Playlist.noPlaylists)
-                    .foregroundColor(AppColors.textSecondary)
+                    .foregroundStyle(Color.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding()
             } else {
@@ -618,13 +618,13 @@ struct VideoSelectionSheet: View {
                     }) {
                         HStack {
                             Image(systemName: "music.note.list")
-                                .foregroundColor(AppColors.accent)
+                                .foregroundStyle(Color.accentColor)
                             Text(playlist.name)
-                                .foregroundColor(AppColors.text)
+                                .foregroundStyle(Color.primary)
                             Spacer()
                             Text(String(format: AppText.Playlist.videosCount, playlist.videoIds.count))
                                 .font(.app.body)
-                                .foregroundColor(AppColors.textSecondary)
+                                .foregroundStyle(Color.secondary)
                         }
                     }
                 }

@@ -20,6 +20,7 @@ class VideoPlayerVM: ObservableObject, VideoSyncDelegate {
     @Published var currentVideoName: String?
     @Published var isFullScreen: Bool = false
     @Published var hasReachedEnd: Bool = false
+    @Published var showSelectVideoHint: Bool = false
 
     private var timeObserver: Any?
     private var endTimeObserver: NSObjectProtocol?
@@ -220,6 +221,13 @@ class VideoPlayerVM: ObservableObject, VideoSyncDelegate {
     // MARK: - Master Controls
 
     func masterPlay() {
+        guard let name = currentVideoName, !name.isEmpty else {
+            showSelectVideoHint = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+                self?.showSelectVideoHint = false
+            }
+            return
+        }
         suppressNativeControlBroadcast = true
         player.play()
         service?.sendPlayCommand(position: currentTime)

@@ -11,28 +11,51 @@ internal import SwiftUI
 private final class ClosePressHandler: ObservableObject {
     private let subject = PassthroughSubject<Void, Never>()
     private var cancellables = Set<AnyCancellable>()
-    private var count = 0
+    private var timer: Timer?
 
     static let requiredPresses = 5
     static let debounceInterval: TimeInterval = 2
+
+    @Published private(set) var count = 0
+    @Published private(set) var lastPressTime: Date?
+
+    var remainingSeconds: Double {
+        guard let last = lastPressTime else { return 0 }
+        return max(0, Self.debounceInterval - Date().timeIntervalSince(last))
+    }
+
+    var showCloseHint: Bool { count > 0 }
 
     init() {
         subject
             .debounce(for: .seconds(Self.debounceInterval), scheduler: RunLoop.main)
             .receive(on: RunLoop.main)
             .sink { [weak self] in
-                self?.count = 0
+                self?.resetCount()
             }
             .store(in: &cancellables)
     }
 
+    private func resetCount() {
+        count = 0
+        lastPressTime = nil
+        timer?.invalidate()
+        timer = nil
+    }
+
     func press(onDismiss: @escaping () -> Void) {
         count += 1
+        lastPressTime = Date()
         subject.send(())
 
         if count >= Self.requiredPresses {
             onDismiss()
-            count = 0
+            resetCount()
+        } else if timer == nil {
+            timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+                RunLoop.main.perform { self?.objectWillChange.send() }
+            }
+            RunLoop.main.add(timer!, forMode: .common)
         }
     }
 }
@@ -104,6 +127,27 @@ struct FullScreenControlsView: View {
                     .padding(.bottom, 24)
             }
             .padding(.horizontal, 24)
+
+            // Close hint popup — shows remaining time, auto-dismisses when count resets
+            if role == .master, closePressHandler.showCloseHint {
+                closeHintPopup
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .allowsHitTesting(false)
+            }
+
+            // Select video hint — when play pressed with no video selected (50pt below center)
+            if role == .master, viewModel.showSelectVideoHint {
+                Text("Please select a video/playlist to play video.")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 14)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .offset(y: 50)
+                    .allowsHitTesting(false)
+            }
         }
         .ignoresSafeArea()
     }
@@ -211,6 +255,17 @@ struct FullScreenControlsView: View {
                 }
             }
         }
+    }
+
+    private var closeHintPopup: some View {
+        let x = ClosePressHandler.requiredPresses - closePressHandler.count
+        return Text("Press \(x) times within 2 seconds to close the full screen")
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundColor(.white)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+            .transition(.opacity.combined(with: .scale(scale: 0.9)))
     }
 
     private func formatTime(_ seconds: Double) -> String {

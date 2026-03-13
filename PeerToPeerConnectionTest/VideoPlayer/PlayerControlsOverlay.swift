@@ -14,6 +14,20 @@ struct PlayerControlsOverlay: View {
 
     var body: some View {
         ZStack {
+            // Select video hint — when play pressed with no video selected (50pt below center)
+            if viewModel.showSelectVideoHint {
+                Text("Please select a video/playlist to play video.")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 14)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .offset(y: 50)
+                    .allowsHitTesting(false)
+            }
+
             // Gradient scrim so controls stay readable over bright video
             LinearGradient(
                 colors: [.black.opacity(0.4), .clear, .black.opacity(0.6)],

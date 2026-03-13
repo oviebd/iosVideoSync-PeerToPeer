@@ -65,7 +65,7 @@ struct HomeView: View {
             }
 
             Text(AppText.Home.title)
-                .font(.app.display)
+                .font(.app.titleLarge)
                 .foregroundColor(AppColors.text)
                 .lineSpacing(AppSpacing.xs)
         }
