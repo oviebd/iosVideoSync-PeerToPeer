@@ -34,6 +34,7 @@ enum AppText {
         static let createRoomSubtitle = "Become the master device"
         static let joinRoom = "Join Room"
         static let joinRoomSubtitle = "Connect to a master device"
+        static let videoSyncInstruction = "For synced playback, all devices must have the same video file (by name) imported."
     }
 
     // MARK: - Room

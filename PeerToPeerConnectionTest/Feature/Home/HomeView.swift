@@ -30,6 +30,10 @@ struct HomeView: View {
                 identityCard
                 Spacer()
 
+                instructionText
+                    .padding(.horizontal, AppSpacing.lg)
+                    .padding(.bottom, AppSpacing.md)
+
                 actions
                     .padding(.horizontal, AppSpacing.xxxl)
                     .padding(.bottom, AppLayout.safeAreaBottomContent)
@@ -113,6 +117,15 @@ struct HomeView: View {
             .overlay(RoundedRectangle(cornerRadius: AppRadius.md).stroke(AppColors.border, lineWidth: 1))
             .cornerRadius(AppRadius.md)
         }
+    }
+
+    // MARK: Instruction
+
+    private var instructionText: some View {
+        Text(AppText.Home.videoSyncInstruction)
+            .font(.app.small)
+            .foregroundColor(AppColors.textSecondary)
+            .multilineTextAlignment(.center)
     }
 
     // MARK: Actions
